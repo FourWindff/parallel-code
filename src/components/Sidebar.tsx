@@ -306,7 +306,7 @@ export function Sidebar() {
                 'font-family': "'JetBrains Mono', monospace",
               }}
             >
-              Parallel Code
+              ParallelCode
             </span>
           </div>
           <div style={{ display: 'flex', gap: '6px' }}>

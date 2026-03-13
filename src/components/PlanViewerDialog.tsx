@@ -39,10 +39,10 @@ export function PlanViewerDialog(props: PlanViewerDialogProps) {
     <Dialog
       open={props.open}
       onClose={props.onClose}
-      width="90vw"
+      width="70vw"
       panelStyle={{
-        height: '85vh',
-        'max-width': '1400px',
+        height: '70vh',
+        'max-width': '1000px',
         overflow: 'hidden',
         padding: '0',
         gap: '0',

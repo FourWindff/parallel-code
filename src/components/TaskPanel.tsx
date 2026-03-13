@@ -617,34 +617,28 @@ export function TaskPanel(props: TaskPanelProps) {
                           // eslint-disable-next-line solid/no-innerhtml -- plan files are local, written by Claude Code in the worktree
                           innerHTML={planHtml()}
                         />
-                        <div
+                        <button
+                          ref={reviewPlanBtnRef}
+                          class="btn-secondary"
                           style={{
-                            display: 'flex',
-                            'justify-content': 'center',
-                            padding: '6px 0',
-                            'flex-shrink': '0',
-                            'border-top': `1px solid ${theme.border}`,
-                            background: theme.taskPanelBg,
+                            position: 'absolute',
+                            bottom: '8px',
+                            right: '8px',
+                            padding: '4px 16px',
+                            'font-size': sf(11),
+                            'font-family': "'JetBrains Mono', monospace",
+                            background: theme.bgInput,
+                            color: theme.fgMuted,
+                            border: `1px solid ${theme.border}`,
+                            'border-radius': '6px',
+                            cursor: 'pointer',
+                            opacity: '0.8',
+                            'z-index': '1',
                           }}
+                          onClick={() => setPlanFullscreen(true)}
                         >
-                          <button
-                            ref={reviewPlanBtnRef}
-                            class="btn-secondary"
-                            style={{
-                              padding: '4px 16px',
-                              'font-size': sf(11),
-                              'font-family': "'JetBrains Mono', monospace",
-                              background: theme.bgInput,
-                              color: theme.fgMuted,
-                              border: `1px solid ${theme.border}`,
-                              'border-radius': '6px',
-                              cursor: 'pointer',
-                            }}
-                            onClick={() => setPlanFullscreen(true)}
-                          >
-                            Review Plan
-                          </button>
-                        </div>
+                          Review Plan
+                        </button>
                       </div>
                     </Show>
                   </div>

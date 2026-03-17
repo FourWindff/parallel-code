@@ -480,33 +480,29 @@ export async function getChangedFiles(worktreePath: string): Promise<
   const { statusMap: committedStatusMap, numstatMap: committedNumstatMap } =
     parseDiffRawNumstat(diffStr);
 
-  // git status --porcelain for uncommitted/untracked paths
-  let statusStr = '';
-  try {
-    const { stdout } = await exec('git', ['status', '--porcelain'], {
+  // git diff --raw --numstat <headHash> — tracked uncommitted changes (HEAD vs working tree).
+  // Compares HEAD tree directly to the working tree, so it does not need the index
+  // write lock and works reliably even while an agent holds it.
+  // git ls-files --others --exclude-standard — untracked files (no index lock needed).
+  // Both commands run in parallel since they are independent.
+  const [uncommittedResult, untrackedResult] = await Promise.all([
+    exec('git', ['diff', '--raw', '--numstat', headHash], {
       cwd: worktreePath,
       maxBuffer: MAX_BUFFER,
-    });
-    statusStr = stdout;
-  } catch {
-    /* empty */
-  }
+    }).catch(() => ({ stdout: '' })),
+    exec('git', ['ls-files', '--others', '--exclude-standard'], {
+      cwd: worktreePath,
+      maxBuffer: MAX_BUFFER,
+    }).catch(() => ({ stdout: '' })),
+  ]);
 
-  const uncommittedPaths = new Map<string, string>(); // path -> status letter
+  const { statusMap: uncommittedStatusMap, numstatMap: uncommittedNumstatMap } =
+    parseDiffRawNumstat(uncommittedResult.stdout);
+
   const untrackedPaths = new Set<string>();
-  for (const line of statusStr.split('\n')) {
-    if (line.length < 3) continue;
-    const p = normalizeStatusPath(line.slice(3));
-    if (!p) continue;
-    if (line.startsWith('??')) {
-      untrackedPaths.add(p);
-      uncommittedPaths.set(p, '?');
-    } else {
-      // Prefer working tree status, fall back to index status
-      const wtStatus = line[1];
-      const indexStatus = line[0];
-      uncommittedPaths.set(p, wtStatus !== ' ' ? wtStatus : indexStatus);
-    }
+  for (const line of untrackedResult.stdout.split('\n')) {
+    const p = normalizeStatusPath(line);
+    if (p) untrackedPaths.add(p);
   }
 
   const files: Array<{
@@ -521,74 +517,53 @@ export async function getChangedFiles(worktreePath: string): Promise<
   // Committed files from diff base..HEAD
   for (const [p, [added, removed]] of committedNumstatMap) {
     const status = committedStatusMap.get(p) ?? 'M';
-    // If also in uncommitted paths, mark as uncommitted (has local changes on top)
-    const committed = !uncommittedPaths.has(p);
+    // If also in uncommitted diff, mark as uncommitted (has local changes on top)
+    const committed =
+      !uncommittedNumstatMap.has(p) && !uncommittedStatusMap.has(p) && !untrackedPaths.has(p);
     seen.add(p);
     files.push({ path: p, lines_added: added, lines_removed: removed, status, committed });
   }
 
-  // Uncommitted-only files (in status but not in committed diff)
-  // Use git diff --numstat HEAD for tracked files to get actual changed line counts
-  const uncommittedNumstat = new Map<string, [number, number]>();
-  const hasTrackedUncommitted = [...uncommittedPaths.keys()].some(
-    (p) => !seen.has(p) && !untrackedPaths.has(p),
-  );
-  if (hasTrackedUncommitted) {
+  // Committed binary/special files (in statusMap but not numstatMap)
+  for (const [p, status] of committedStatusMap) {
+    if (seen.has(p)) continue;
+    const committed =
+      !uncommittedNumstatMap.has(p) && !uncommittedStatusMap.has(p) && !untrackedPaths.has(p);
+    seen.add(p);
+    files.push({ path: p, lines_added: 0, lines_removed: 0, status, committed });
+  }
+
+  // Tracked uncommitted files not in committed diff
+  for (const [p, [added, removed]] of uncommittedNumstatMap) {
+    if (seen.has(p)) continue;
+    const status = uncommittedStatusMap.get(p) ?? 'M';
+    seen.add(p);
+    files.push({ path: p, lines_added: added, lines_removed: removed, status, committed: false });
+  }
+
+  // Uncommitted binary/special files (in statusMap but not numstatMap)
+  for (const [p, status] of uncommittedStatusMap) {
+    if (seen.has(p) || uncommittedNumstatMap.has(p)) continue;
+    seen.add(p);
+    files.push({ path: p, lines_added: 0, lines_removed: 0, status, committed: false });
+  }
+
+  // Untracked (new) files: count all lines as added
+  for (const p of untrackedPaths) {
+    if (seen.has(p)) continue;
+    let added = 0;
+    const fullPath = path.join(worktreePath, p);
     try {
-      const { stdout } = await exec('git', ['diff', '--numstat', 'HEAD'], {
-        cwd: worktreePath,
-        maxBuffer: MAX_BUFFER,
-      });
-      for (const line of stdout.split('\n')) {
-        const parts = line.split('\t');
-        if (parts.length >= 3) {
-          const a = parseInt(parts[0], 10);
-          const r = parseInt(parts[1], 10);
-          if (!isNaN(a) && !isNaN(r)) {
-            const rawPath = parts[parts.length - 1];
-            const np = normalizeStatusPath(rawPath);
-            if (np) uncommittedNumstat.set(np, [a, r]);
-          }
-        }
+      const stat = await fs.promises.stat(fullPath);
+      if (stat.isFile() && stat.size < MAX_BUFFER) {
+        const content = await fs.promises.readFile(fullPath, 'utf8');
+        const lines = content.split('\n');
+        added = content.endsWith('\n') ? lines.length - 1 : lines.length;
       }
     } catch {
       /* ignore */
     }
-  }
-
-  for (const [p, statusLetter] of uncommittedPaths) {
-    if (seen.has(p)) continue;
-    let added = 0;
-    let removed = 0;
-
-    if (untrackedPaths.has(p)) {
-      // Untracked (new) files: count all lines as added
-      const fullPath = path.join(worktreePath, p);
-      try {
-        const stat = await fs.promises.stat(fullPath);
-        if (stat.isFile() && stat.size < MAX_BUFFER) {
-          const content = await fs.promises.readFile(fullPath, 'utf8');
-          const lines = content.split('\n');
-          added = content.endsWith('\n') ? lines.length - 1 : lines.length;
-        }
-      } catch {
-        /* ignore */
-      }
-    } else {
-      // Tracked files: use actual diff stats
-      const stats = uncommittedNumstat.get(p);
-      if (stats) {
-        [added, removed] = stats;
-      }
-    }
-
-    files.push({
-      path: p,
-      lines_added: added,
-      lines_removed: removed,
-      status: statusLetter,
-      committed: false,
-    });
+    files.push({ path: p, lines_added: added, lines_removed: 0, status: '?', committed: false });
   }
 
   files.sort((a, b) => {

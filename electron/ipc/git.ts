@@ -1127,3 +1127,15 @@ export async function rebaseTask(worktreePath: string): Promise<void> {
     invalidateMergeBaseCache();
   });
 }
+
+/** Check whether a directory is the root of a git repository. */
+export async function isGitRepo(dirPath: string): Promise<boolean> {
+  try {
+    const { stdout } = await exec('git', ['rev-parse', '--show-toplevel'], { cwd: dirPath });
+    const toplevel = fs.realpathSync(stdout.trim());
+    const resolved = fs.realpathSync(dirPath);
+    return toplevel === resolved;
+  } catch {
+    return false;
+  }
+}

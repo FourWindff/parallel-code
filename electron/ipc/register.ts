@@ -43,6 +43,7 @@ import {
   rebaseTask,
   createWorktree,
   removeWorktree,
+  isGitRepo,
 } from './git.js';
 import { createTask, deleteTask } from './tasks.js';
 import { listAgents } from './agents.js';
@@ -255,6 +256,10 @@ export function registerAllHandlers(win: BrowserWindow): void {
   ipcMain.handle(IPC.GetCurrentBranch, (_e, args) => {
     validatePath(args.projectRoot, 'projectRoot');
     return getCurrentBranch(args.projectRoot);
+  });
+  ipcMain.handle(IPC.CheckIsGitRepo, (_e, args) => {
+    validatePath(args.path, 'path');
+    return isGitRepo(args.path);
   });
 
   // --- Persistence ---

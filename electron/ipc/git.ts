@@ -317,7 +317,7 @@ async function computeBranchDiffStats(
   mainBranch: string,
   branchName: string,
 ): Promise<{ linesAdded: number; linesRemoved: number }> {
-  const { stdout } = await exec('git', ['diff', '--numstat', `${mainBranch}..${branchName}`], {
+  const { stdout } = await exec('git', ['diff', '--numstat', `${mainBranch}...${branchName}`], {
     cwd: projectRoot,
     maxBuffer: MAX_BUFFER,
   });

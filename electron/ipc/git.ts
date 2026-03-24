@@ -197,6 +197,9 @@ async function getCurrentBranchName(repoRoot: string): Promise<string> {
  * local branch or its remote-tracking counterpart.  Using the most advanced
  * ref prevents diffs from showing files already present on the other side.
  * Falls back to the bare name when no remote ref exists (local-only repos).
+ *
+ * Note: for merge-base computation, use detectMergeBase() directly — it
+ * compares both local and remote merge-bases to pick the closest one.
  */
 async function resolveComparisonRef(repoRoot: string, branch: string): Promise<string> {
   if (branch.includes('/')) return branch;
@@ -219,28 +222,49 @@ async function detectMergeBase(
   head?: string,
   baseBranch?: string,
 ): Promise<string> {
-  const mainBranch = await resolveComparisonRef(
-    repoRoot,
-    baseBranch ?? (await detectMainBranch(repoRoot)),
-  );
-  const key = `${cacheKey(repoRoot)}:${mainBranch}`;
+  const branch = baseBranch ?? (await detectMainBranch(repoRoot));
+  const headRef = head ?? 'HEAD';
+  const key = `${cacheKey(repoRoot)}:${branch}`;
   const cached = mergeBaseCache.get(key);
   if (cached) {
     if (cached.expiresAt > Date.now()) return cached.value;
     mergeBaseCache.delete(key);
   }
 
-  let result: string;
-  try {
-    const { stdout } = await exec('git', ['merge-base', mainBranch, head ?? 'HEAD'], {
-      cwd: repoRoot,
-    });
-    const hash = stdout.trim();
-    result = hash || mainBranch;
-  } catch {
-    result = mainBranch;
+  // When a remote-tracking ref exists, compute merge-base against both the
+  // local branch and origin/<branch>, then pick whichever is closer to HEAD.
+  // This avoids showing extra files when local and remote have diverged.
+  const refs = [branch];
+  if (!branch.includes('/') && (await remoteTrackingRefExists(repoRoot, branch))) {
+    refs.push(`origin/${branch}`);
   }
 
+  let best: string | null = null;
+  for (const ref of refs) {
+    try {
+      const { stdout } = await exec('git', ['merge-base', ref, headRef], { cwd: repoRoot });
+      const mb = stdout.trim();
+      if (!mb) continue;
+      if (!best) {
+        best = mb;
+        continue;
+      }
+      if (mb === best) continue;
+      // Two different merge-bases: pick the descendant (closer to HEAD).
+      // `--is-ancestor A B` succeeds when A is reachable from B.
+      const aIsAncestor = await exec('git', ['merge-base', '--is-ancestor', best, mb], {
+        cwd: repoRoot,
+      }).then(
+        () => true,
+        () => false,
+      );
+      if (aIsAncestor) best = mb;
+    } catch {
+      /* ref may not resolve — skip */
+    }
+  }
+
+  const result = best || branch;
   mergeBaseCache.set(key, { value: result, expiresAt: Date.now() + MERGE_BASE_TTL });
   return result;
 }

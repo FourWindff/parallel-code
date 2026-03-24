@@ -58,7 +58,7 @@ export function NewTaskDialog(props: NewTaskDialogProps) {
   let buildOutputRef!: HTMLPreElement;
 
   const focusableSelector =
-    'textarea:not(:disabled), input:not(:disabled), select:not(:disabled), button:not(:disabled), [tabindex]:not([tabindex="-1"])';
+    'textarea:not(:disabled):not([tabindex="-1"]), input:not(:disabled):not([tabindex="-1"]), select:not(:disabled):not([tabindex="-1"]), button:not(:disabled):not([tabindex="-1"]), [tabindex]:not([tabindex="-1"])';
 
   function navigateDialogFields(direction: 'up' | 'down'): void {
     if (!formRef) return;
@@ -436,7 +436,7 @@ export function NewTaskDialog(props: NewTaskDialogProps) {
     <Dialog
       open={props.open}
       onClose={props.onClose}
-      width={store.availableAgents.length > 8 ? '540px' : '420px'}
+      width={store.availableAgents.length > 8 ? '580px' : '500px'}
       panelStyle={{ gap: '20px' }}
     >
       <form

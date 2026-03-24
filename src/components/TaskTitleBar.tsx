@@ -74,7 +74,7 @@ export function TaskTitleBar(props: TaskTitleBarProps) {
         }}
       >
         <StatusDot status={getTaskDotStatus(props.task.id)} size="md" />
-        <Show when={props.task.directMode}>
+        <Show when={props.task.gitIsolation === 'direct'}>
           <span style={badgeStyle(theme.warning)}>{props.task.branchName}</span>
         </Show>
         <Show when={props.task.dockerMode}>
@@ -89,7 +89,7 @@ export function TaskTitleBar(props: TaskTitleBarProps) {
         />
       </div>
       <div style={{ display: 'flex', gap: '4px', 'margin-left': '8px', 'flex-shrink': '0' }}>
-        <Show when={!props.task.directMode}>
+        <Show when={props.task.gitIsolation !== 'direct'}>
           <IconButton
             icon={
               <svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor">

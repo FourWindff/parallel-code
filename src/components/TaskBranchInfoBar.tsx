@@ -109,8 +109,8 @@ export function TaskBranchInfoBar(props: TaskBranchInfoBarProps) {
         >
           <path d="M5 3.25a.75.75 0 1 1-1.5 0 .75.75 0 0 1 1.5 0Zm6.25 7.5a.75.75 0 1 0 0-1.5.75.75 0 0 0 0 1.5ZM5 7.75a.75.75 0 1 1-1.5 0 .75.75 0 0 1 1.5 0Zm0 0h5.5a2.5 2.5 0 0 0 2.5-2.5v-.5a.75.75 0 0 0-1.5 0v.5a1 1 0 0 1-1 1H5a3.25 3.25 0 1 0 0 6.5h6.25a.75.75 0 0 0 0-1.5H5a1.75 1.75 0 1 1 0-3.5Z" />
         </svg>
-        <Show when={!props.task.directMode}>{props.task.branchName}</Show>
-        <Show when={props.task.directMode}>
+        <Show when={props.task.gitIsolation !== 'direct'}>{props.task.branchName}</Show>
+        <Show when={props.task.gitIsolation === 'direct'}>
           <span
             style={{
               'font-size': '10px',

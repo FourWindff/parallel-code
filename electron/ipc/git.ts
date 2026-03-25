@@ -264,9 +264,15 @@ async function detectMergeBase(
     }
   }
 
-  const result = best || branch;
-  mergeBaseCache.set(key, { value: result, expiresAt: Date.now() + MERGE_BASE_TTL });
-  return result;
+  if (!best) {
+    // All merge-base computations failed — fall back to headRef so that
+    // callers diff HEAD against itself (empty diff) rather than diffing
+    // against the branch tip, which would include the base branch's changes.
+    return headRef;
+  }
+
+  mergeBaseCache.set(key, { value: best, expiresAt: Date.now() + MERGE_BASE_TTL });
+  return best;
 }
 
 async function pinHead(worktreePath: string): Promise<string> {

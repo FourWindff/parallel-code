@@ -137,12 +137,11 @@ describe('baseBranch fallback to detectMainBranch', () => {
 });
 
 // ---------------------------------------------------------------------------
-// Worktree-based diff functions (main-tip diffing with feature file filtering)
+// Worktree-based diff functions (merge-base one-way diffs)
 // ---------------------------------------------------------------------------
 
 const HEAD_HASH = 'abc123def456';
 const MERGE_BASE = 'merge000base';
-const MAIN_TIP = 'main'; // resolveMainTipRef returns branch name when no remote
 
 // Counter to generate unique worktree paths per test, avoiding cross-test
 // cache pollution from the module-level mergeBaseCache/mainBranchCache
@@ -155,24 +154,19 @@ function uniqueWorktreePath(): string {
 /**
  * Build a mock handler for worktree-based functions.
  *
- * No-remote scenario: detectMergeBase returns MERGE_BASE, resolveMainTipRef
- * returns MAIN_TIP (the branch name string). Since MERGE_BASE !== MAIN_TIP,
- * the feature-file-set filtering logic is triggered.
+ * No-remote scenario: detectMergeBase returns MERGE_BASE.  All diff commands
+ * use the merge-base ref for one-way diffs (feature branch changes only).
  */
 function buildWorktreeMockHandler(opts: {
   mergeBase?: string;
-  mainTip?: string;
-  featureFiles?: string;
   committedRawNumstat?: string;
   uncommittedRawNumstat?: string;
   untrackedFiles?: string;
   showOutputs?: Record<string, string>;
   diffOutput?: string;
   statusPorcelain?: string;
-  diffNameOnlyHead?: string;
 }): MockHandler {
   const mergeBase = opts.mergeBase ?? MERGE_BASE;
-  const mainTip = opts.mainTip ?? MAIN_TIP;
 
   return (args, cb) => {
     const cmd = args[0];
@@ -207,58 +201,40 @@ function buildWorktreeMockHandler(opts: {
       return;
     }
 
-    // rev-list --count (resolveComparisonRef)
-    if (cmd === 'rev-list') {
-      cb(new Error('no remote'), '', '');
-      return;
-    }
-
-    // diff --name-only <mergeBase> <head> — feature file set (getChangedFiles)
-    if (cmd === 'diff' && args[1] === '--name-only' && args[2] === mergeBase) {
-      cb(null, opts.featureFiles ?? '', '');
-      return;
-    }
-
-    // diff --name-only <head> (3 args only) — uncommitted file names (getAllFileDiffs)
-    if (cmd === 'diff' && args[1] === '--name-only' && args[2] === HEAD_HASH && args.length === 3) {
-      cb(null, opts.diffNameOnlyHead ?? '', '');
-      return;
-    }
-
-    // diff --raw --numstat <mainTip> <head> — committed changes
+    // diff --raw --numstat <mergeBase> <head> — committed changes (one-way)
     if (
       cmd === 'diff' &&
       args.includes('--raw') &&
       args.includes('--numstat') &&
-      args.includes(mainTip) &&
+      args.includes(mergeBase) &&
       args.includes(HEAD_HASH)
     ) {
       cb(null, opts.committedRawNumstat ?? '', '');
       return;
     }
 
-    // diff --raw --numstat <head> (no mainTip) — uncommitted changes
+    // diff --raw --numstat <head> (no mergeBase) — uncommitted changes
     if (
       cmd === 'diff' &&
       args.includes('--raw') &&
       args.includes('--numstat') &&
       args.includes(HEAD_HASH) &&
-      !args.includes(mainTip)
+      !args.includes(mergeBase)
     ) {
       cb(null, opts.uncommittedRawNumstat ?? '', '');
       return;
     }
 
-    // diff -U3 <mainTip> — getAllFileDiffs unified diff
-    if (cmd === 'diff' && args.includes('-U3') && args.includes(mainTip)) {
+    // diff -U3 <mergeBase> — getAllFileDiffs unified diff (one-way)
+    if (cmd === 'diff' && args.includes('-U3') && args.includes(mergeBase)) {
       cb(null, opts.diffOutput ?? '', '');
       return;
     }
 
-    // diff <mainTip> <head> -- <path> — getFileDiff committed diff
+    // diff <mergeBase> <head> -- <path> — getFileDiff committed diff (one-way)
     if (
       cmd === 'diff' &&
-      args.includes(mainTip) &&
+      args.includes(mergeBase) &&
       args.includes(HEAD_HASH) &&
       args.includes('--')
     ) {
@@ -310,35 +286,17 @@ function rawNumstatEntry(filePath: string, added: number, removed: number, statu
 // getChangedFiles — worktree-based
 // ---------------------------------------------------------------------------
 
-describe('getChangedFiles (worktree-based, main-tip diff)', () => {
+describe('getChangedFiles (worktree-based, merge-base diff)', () => {
   beforeEach(() => {
     vi.clearAllMocks();
   });
 
-  describe('when main is ahead (base !== mainTip)', () => {
-    it('should exclude a file changed identically on both branches', async () => {
-      // Feature modified file.ts, main also modified it identically.
-      // mainTip->HEAD diff shows nothing for file.ts (content is the same).
+  describe('committed changes (merge-base → HEAD)', () => {
+    it('should include a file changed on the feature branch', async () => {
       const calls: string[][] = [];
       setupMock(
         calls,
         buildWorktreeMockHandler({
-          featureFiles: 'file.ts\n',
-          committedRawNumstat: '', // mainTip->HEAD has no diff for file.ts
-        }),
-      );
-
-      const files = await getChangedFiles(uniqueWorktreePath(), 'main');
-
-      expect(files).toEqual([]);
-    });
-
-    it('should include a file changed only on the feature branch', async () => {
-      const calls: string[][] = [];
-      setupMock(
-        calls,
-        buildWorktreeMockHandler({
-          featureFiles: 'feature-file.ts\n',
           committedRawNumstat: rawNumstatEntry('feature-file.ts', 10, 2),
         }),
       );
@@ -349,12 +307,11 @@ describe('getChangedFiles (worktree-based, main-tip diff)', () => {
       expect(files[0].path).toBe('feature-file.ts');
     });
 
-    it('should report correct line counts for a feature-only file', async () => {
+    it('should report correct line counts', async () => {
       const calls: string[][] = [];
       setupMock(
         calls,
         buildWorktreeMockHandler({
-          featureFiles: 'feature-file.ts\n',
           committedRawNumstat: rawNumstatEntry('feature-file.ts', 10, 2),
         }),
       );
@@ -370,7 +327,6 @@ describe('getChangedFiles (worktree-based, main-tip diff)', () => {
       setupMock(
         calls,
         buildWorktreeMockHandler({
-          featureFiles: 'new-file.ts\n',
           committedRawNumstat: rawNumstatEntry('new-file.ts', 20, 0, 'A'),
         }),
       );
@@ -380,16 +336,14 @@ describe('getChangedFiles (worktree-based, main-tip diff)', () => {
       expect(files[0].status).toBe('A');
     });
 
-    it('should exclude a file changed only on main', async () => {
-      // main-only.ts appears in mainTip->HEAD diff but NOT in the feature file set
+    it('should return multiple committed files', async () => {
       const calls: string[][] = [];
       setupMock(
         calls,
         buildWorktreeMockHandler({
-          featureFiles: 'feature-file.ts\n',
           committedRawNumstat: [
-            rawNumstatEntry('feature-file.ts', 5, 1),
-            rawNumstatEntry('main-only.ts', 3, 0),
+            rawNumstatEntry('file-a.ts', 5, 2),
+            rawNumstatEntry('file-b.ts', 3, 1),
           ].join('\n'),
         }),
       );
@@ -397,26 +351,8 @@ describe('getChangedFiles (worktree-based, main-tip diff)', () => {
       const files = await getChangedFiles(uniqueWorktreePath(), 'main');
 
       const paths = files.map((f) => f.path);
-      expect(paths).not.toContain('main-only.ts');
-    });
-
-    it('should keep feature files while filtering main-only files', async () => {
-      const calls: string[][] = [];
-      setupMock(
-        calls,
-        buildWorktreeMockHandler({
-          featureFiles: 'feature-file.ts\n',
-          committedRawNumstat: [
-            rawNumstatEntry('feature-file.ts', 5, 1),
-            rawNumstatEntry('main-only.ts', 3, 0),
-          ].join('\n'),
-        }),
-      );
-
-      const files = await getChangedFiles(uniqueWorktreePath(), 'main');
-
-      const paths = files.map((f) => f.path);
-      expect(paths).toContain('feature-file.ts');
+      expect(paths).toContain('file-a.ts');
+      expect(paths).toContain('file-b.ts');
     });
 
     it('should mark a committed file as committed when it has no uncommitted changes', async () => {
@@ -424,7 +360,6 @@ describe('getChangedFiles (worktree-based, main-tip diff)', () => {
       setupMock(
         calls,
         buildWorktreeMockHandler({
-          featureFiles: 'clean.ts\n',
           committedRawNumstat: rawNumstatEntry('clean.ts', 4, 1),
           uncommittedRawNumstat: '',
           untrackedFiles: '',
@@ -441,7 +376,6 @@ describe('getChangedFiles (worktree-based, main-tip diff)', () => {
       setupMock(
         calls,
         buildWorktreeMockHandler({
-          featureFiles: 'dirty.ts\n',
           committedRawNumstat: rawNumstatEntry('dirty.ts', 4, 1),
           uncommittedRawNumstat: rawNumstatEntry('dirty.ts', 1, 0),
         }),
@@ -451,44 +385,42 @@ describe('getChangedFiles (worktree-based, main-tip diff)', () => {
 
       expect(files[0].committed).toBe(false);
     });
-  });
 
-  describe('when base equals mainTip (no filtering)', () => {
-    it('should not compute the feature file set', async () => {
-      // mergeBase === mainTip -> base === mainTip, skipping feature file filtering.
+    it('should return empty list when no changes since merge-base', async () => {
       const calls: string[][] = [];
       setupMock(
         calls,
         buildWorktreeMockHandler({
-          mergeBase: MAIN_TIP, // base will equal mainTip ('main')
-          committedRawNumstat: rawNumstatEntry('some-file.ts', 7, 3),
-        }),
-      );
-
-      await getChangedFiles(uniqueWorktreePath(), 'main');
-
-      const nameOnlyCall = calls.find((a) => a[0] === 'diff' && a[1] === '--name-only');
-      expect(nameOnlyCall).toBeUndefined();
-    });
-
-    it('should return all committed files without filtering', async () => {
-      const calls: string[][] = [];
-      setupMock(
-        calls,
-        buildWorktreeMockHandler({
-          mergeBase: MAIN_TIP, // base === mainTip -> no filtering
-          committedRawNumstat: [
-            rawNumstatEntry('file-a.ts', 5, 2),
-            rawNumstatEntry('file-b.ts', 3, 1),
-          ].join('\n'),
+          committedRawNumstat: '',
         }),
       );
 
       const files = await getChangedFiles(uniqueWorktreePath(), 'main');
 
-      const paths = files.map((f) => f.path);
-      expect(paths).toContain('file-a.ts');
-      expect(paths).toContain('file-b.ts');
+      expect(files).toEqual([]);
+    });
+
+    it('should diff against merge-base, not branch tip', async () => {
+      const calls: string[][] = [];
+      setupMock(
+        calls,
+        buildWorktreeMockHandler({
+          committedRawNumstat: rawNumstatEntry('file.ts', 1, 0),
+        }),
+      );
+
+      await getChangedFiles(uniqueWorktreePath(), 'main');
+
+      // The committed diff should use MERGE_BASE, not MAIN_TIP
+      const diffCall = calls.find(
+        (a) =>
+          a[0] === 'diff' &&
+          a.includes('--raw') &&
+          a.includes('--numstat') &&
+          a.includes(HEAD_HASH),
+      );
+      expect(diffCall).toBeDefined();
+      expect(diffCall).toContain(MERGE_BASE);
     });
   });
 
@@ -498,7 +430,6 @@ describe('getChangedFiles (worktree-based, main-tip diff)', () => {
       setupMock(
         calls,
         buildWorktreeMockHandler({
-          featureFiles: 'committed.ts\n',
           committedRawNumstat: rawNumstatEntry('committed.ts', 5, 0),
           uncommittedRawNumstat: rawNumstatEntry('uncommitted-only.ts', 2, 1),
         }),
@@ -515,7 +446,6 @@ describe('getChangedFiles (worktree-based, main-tip diff)', () => {
       setupMock(
         calls,
         buildWorktreeMockHandler({
-          featureFiles: 'committed.ts\n',
           committedRawNumstat: rawNumstatEntry('committed.ts', 5, 0),
           uncommittedRawNumstat: rawNumstatEntry('uncommitted-only.ts', 2, 1),
         }),
@@ -533,7 +463,6 @@ describe('getChangedFiles (worktree-based, main-tip diff)', () => {
       setupMock(
         calls,
         buildWorktreeMockHandler({
-          featureFiles: '',
           committedRawNumstat: '',
           uncommittedRawNumstat: rawNumstatEntry('local.ts', 7, 3),
         }),
@@ -553,125 +482,51 @@ describe('getChangedFiles (worktree-based, main-tip diff)', () => {
 // getAllFileDiffs — worktree-based
 // ---------------------------------------------------------------------------
 
-describe('getAllFileDiffs (worktree-based, main-tip diff)', () => {
+describe('getAllFileDiffs (worktree-based, merge-base diff)', () => {
   beforeEach(() => {
     vi.clearAllMocks();
   });
 
-  it('should filter unified diff to feature-branch files when main is ahead', async () => {
+  it('should diff against merge-base without file filtering', async () => {
     const calls: string[][] = [];
     setupMock(
       calls,
       buildWorktreeMockHandler({
-        featureFiles: 'feature.ts\n',
         diffOutput: 'diff --git a/feature.ts b/feature.ts\n',
-      }),
-    );
-
-    await getAllFileDiffs(uniqueWorktreePath(), 'main');
-
-    // The diff -U3 call should pass -- feature.ts as the file filter
-    const u3Call = calls.find((a) => a[0] === 'diff' && a.includes('-U3'));
-    expect(u3Call).toBeDefined();
-    expect(u3Call).toContain('feature.ts');
-  });
-
-  it('should include the -- separator when filtering files', async () => {
-    const calls: string[][] = [];
-    setupMock(
-      calls,
-      buildWorktreeMockHandler({
-        featureFiles: 'feature.ts\n',
-        diffOutput: '',
-      }),
-    );
-
-    await getAllFileDiffs(uniqueWorktreePath(), 'main');
-
-    const u3Call = calls.find((a) => a[0] === 'diff' && a.includes('-U3'));
-    expect(u3Call).toContain('--');
-  });
-
-  it('should not pass file filter when base equals mainTip', async () => {
-    const calls: string[][] = [];
-    setupMock(
-      calls,
-      buildWorktreeMockHandler({
-        mergeBase: MAIN_TIP, // base === mainTip -> no filtering
-        diffOutput: 'some diff output',
         statusPorcelain: '',
       }),
     );
 
     await getAllFileDiffs(uniqueWorktreePath(), 'main');
 
-    // The -U3 call should NOT have a -- separator (no file filter)
     const u3Call = calls.find((a) => a[0] === 'diff' && a.includes('-U3'));
     expect(u3Call).toBeDefined();
+    expect(u3Call).toContain(MERGE_BASE);
+    // No file filter (no -- separator)
     expect(u3Call).not.toContain('--');
   });
 
-  it('should include uncommitted-only files in the file filter', async () => {
-    // committed.ts is a committed feature file, local-only.ts has only uncommitted edits
+  it('should return diff output from merge-base comparison', async () => {
     const calls: string[][] = [];
     setupMock(
       calls,
       buildWorktreeMockHandler({
-        featureFiles: 'committed.ts\n',
-        diffNameOnlyHead: 'local-only.ts\n',
-        diffOutput: 'diff output for both files',
-      }),
-    );
-
-    await getAllFileDiffs(uniqueWorktreePath(), 'main');
-
-    const u3Call = calls.find((a) => a[0] === 'diff' && a.includes('-U3'));
-    expect(u3Call).toContain('local-only.ts');
-  });
-
-  it('should include committed feature files in the file filter alongside uncommitted ones', async () => {
-    const calls: string[][] = [];
-    setupMock(
-      calls,
-      buildWorktreeMockHandler({
-        featureFiles: 'committed.ts\n',
-        diffNameOnlyHead: 'local-only.ts\n',
-        diffOutput: '',
-      }),
-    );
-
-    await getAllFileDiffs(uniqueWorktreePath(), 'main');
-
-    const u3Call = calls.find((a) => a[0] === 'diff' && a.includes('-U3'));
-    expect(u3Call).toContain('committed.ts');
-  });
-
-  it('should skip the committed diff entirely when feature file set is empty', async () => {
-    // Main moved ahead but feature branch has no committed or uncommitted changes
-    const calls: string[][] = [];
-    setupMock(
-      calls,
-      buildWorktreeMockHandler({
-        featureFiles: '',
-        diffNameOnlyHead: '',
+        diffOutput: 'diff --git a/file.ts b/file.ts\nsome changes\n',
         statusPorcelain: '',
       }),
     );
 
-    await getAllFileDiffs(uniqueWorktreePath(), 'main');
+    const result = await getAllFileDiffs(uniqueWorktreePath(), 'main');
 
-    // No -U3 diff call should have been made (filterFiles.length === 0)
-    const u3Call = calls.find((a) => a[0] === 'diff' && a.includes('-U3'));
-    expect(u3Call).toBeUndefined();
+    expect(result).toContain('diff --git a/file.ts b/file.ts');
   });
 
-  it('should return empty string when there are no changes at all', async () => {
+  it('should return empty string when there are no changes', async () => {
     const calls: string[][] = [];
     setupMock(
       calls,
       buildWorktreeMockHandler({
-        featureFiles: '',
-        diffNameOnlyHead: '',
+        diffOutput: '',
         statusPorcelain: '',
       }),
     );
@@ -686,18 +541,18 @@ describe('getAllFileDiffs (worktree-based, main-tip diff)', () => {
 // getFileDiff — worktree-based
 // ---------------------------------------------------------------------------
 
-describe('getFileDiff (worktree-based, main-tip diff)', () => {
+describe('getFileDiff (worktree-based, merge-base diff)', () => {
   beforeEach(() => {
     vi.clearAllMocks();
   });
 
-  it('should return old content from mainTip', async () => {
+  it('should return old content from merge-base', async () => {
     const calls: string[][] = [];
     setupMock(
       calls,
       buildWorktreeMockHandler({
         showOutputs: {
-          [`${MAIN_TIP}:src/app.ts`]: 'old main content',
+          [`${MERGE_BASE}:src/app.ts`]: 'old merge-base content',
           [`${HEAD_HASH}:src/app.ts`]: 'new feature content',
         },
         diffOutput: 'diff --git a/src/app.ts b/src/app.ts\n',
@@ -706,24 +561,22 @@ describe('getFileDiff (worktree-based, main-tip diff)', () => {
 
     const result = await getFileDiff(uniqueWorktreePath(), 'src/app.ts', 'main');
 
-    expect(result.oldContent).toBe('old main content');
+    expect(result.oldContent).toBe('old merge-base content');
   });
 
   it('should use committed content as newContent when disk matches committed', async () => {
-    // File exists on disk with same content as committed -> uses committedContent
     const calls: string[][] = [];
     setupMock(
       calls,
       buildWorktreeMockHandler({
         showOutputs: {
-          [`${MAIN_TIP}:src/app.ts`]: 'old content',
+          [`${MERGE_BASE}:src/app.ts`]: 'old content',
           [`${HEAD_HASH}:src/app.ts`]: 'committed new content',
         },
         diffOutput: 'some diff',
       }),
     );
 
-    // Mock fs: file exists on disk with the same content as committed
     vi.mocked(fs.promises.stat).mockResolvedValueOnce({
       isFile: () => true,
       size: 100,
@@ -735,20 +588,19 @@ describe('getFileDiff (worktree-based, main-tip diff)', () => {
     expect(result.newContent).toBe('committed new content');
   });
 
-  it('should return empty oldContent for a new file not on mainTip', async () => {
+  it('should return empty oldContent for a new file not at merge-base', async () => {
     const calls: string[][] = [];
     setupMock(
       calls,
       buildWorktreeMockHandler({
         showOutputs: {
-          // mainTip:new-file.ts intentionally missing -> old content empty
+          // merge-base:new-file.ts intentionally missing -> old content empty
           [`${HEAD_HASH}:new-file.ts`]: 'brand new content',
         },
         diffOutput: '',
       }),
     );
 
-    // Mock fs so the file "exists" on disk for pseudo-diff generation
     vi.mocked(fs.promises.stat).mockResolvedValueOnce({
       isFile: () => true,
       size: 100,
@@ -760,13 +612,13 @@ describe('getFileDiff (worktree-based, main-tip diff)', () => {
     expect(result.oldContent).toBe('');
   });
 
-  it('should issue diff command against mainTip ref, not merge-base', async () => {
+  it('should issue diff command against merge-base ref', async () => {
     const calls: string[][] = [];
     setupMock(
       calls,
       buildWorktreeMockHandler({
         showOutputs: {
-          [`${MAIN_TIP}:file.ts`]: 'old',
+          [`${MERGE_BASE}:file.ts`]: 'old',
           [`${HEAD_HASH}:file.ts`]: 'new',
         },
         diffOutput: 'diff output',
@@ -777,7 +629,7 @@ describe('getFileDiff (worktree-based, main-tip diff)', () => {
 
     const diffCall = calls.find((a) => a[0] === 'diff' && a.includes('--'));
     expect(diffCall).toBeDefined();
-    expect(diffCall).toContain(MAIN_TIP);
+    expect(diffCall).toContain(MERGE_BASE);
   });
 
   it('should include HEAD hash in the diff command', async () => {
@@ -786,7 +638,7 @@ describe('getFileDiff (worktree-based, main-tip diff)', () => {
       calls,
       buildWorktreeMockHandler({
         showOutputs: {
-          [`${MAIN_TIP}:file.ts`]: 'old',
+          [`${MERGE_BASE}:file.ts`]: 'old',
           [`${HEAD_HASH}:file.ts`]: 'new',
         },
         diffOutput: 'diff output',
@@ -799,13 +651,13 @@ describe('getFileDiff (worktree-based, main-tip diff)', () => {
     expect(diffCall).toContain(HEAD_HASH);
   });
 
-  it('should return the diff output from the mainTip-to-HEAD diff', async () => {
+  it('should return the diff output from the merge-base-to-HEAD diff', async () => {
     const calls: string[][] = [];
     setupMock(
       calls,
       buildWorktreeMockHandler({
         showOutputs: {
-          [`${MAIN_TIP}:shared.ts`]: 'content on main tip',
+          [`${MERGE_BASE}:shared.ts`]: 'content at merge-base',
           [`${HEAD_HASH}:shared.ts`]: 'content on feature',
         },
         diffOutput: 'diff for shared.ts',
@@ -823,14 +675,13 @@ describe('getFileDiff (worktree-based, main-tip diff)', () => {
       calls,
       buildWorktreeMockHandler({
         showOutputs: {
-          [`${MAIN_TIP}:file.ts`]: 'main content',
+          [`${MERGE_BASE}:file.ts`]: 'merge-base content',
           [`${HEAD_HASH}:file.ts`]: 'committed content',
         },
         diffOutput: 'some diff',
       }),
     );
 
-    // Disk has different content than committed (uncommitted changes)
     vi.mocked(fs.promises.stat).mockResolvedValueOnce({
       isFile: () => true,
       size: 100,

@@ -192,31 +192,6 @@ async function getCurrentBranchName(repoRoot: string): Promise<string> {
   return stdout.trim();
 }
 
-/**
- * Resolve a branch name to whichever ref is further ahead for comparisons:
- * local branch or its remote-tracking counterpart.  Using the most advanced
- * ref prevents diffs from showing files already present on the other side.
- * Falls back to the bare name when no remote ref exists (local-only repos).
- *
- * Note: for merge-base computation, use detectMergeBase() directly — it
- * compares both local and remote merge-bases to pick the closest one.
- */
-async function resolveComparisonRef(repoRoot: string, branch: string): Promise<string> {
-  if (branch.includes('/')) return branch;
-  if (!(await remoteTrackingRefExists(repoRoot, branch))) return branch;
-
-  const remote = `origin/${branch}`;
-  try {
-    const { stdout } = await exec('git', ['rev-list', '--count', `${branch}..${remote}`], {
-      cwd: repoRoot,
-    });
-    const originAhead = parseInt(stdout.trim(), 10) || 0;
-    return originAhead > 0 ? remote : branch;
-  } catch {
-    return branch;
-  }
-}
-
 async function detectMergeBase(
   repoRoot: string,
   head?: string,
@@ -231,58 +206,20 @@ async function detectMergeBase(
     mergeBaseCache.delete(key);
   }
 
-  // When a remote-tracking ref exists, compute merge-base against both the
-  // local branch and origin/<branch>, then pick whichever is closer to HEAD.
-  // This avoids showing extra files when local and remote have diverged.
-  const refs = [branch];
-  if (!branch.includes('/') && (await remoteTrackingRefExists(repoRoot, branch))) {
-    refs.push(`origin/${branch}`);
-  }
-
-  let best: string | null = null;
-  for (const ref of refs) {
-    try {
-      const { stdout } = await exec('git', ['merge-base', ref, headRef], { cwd: repoRoot });
-      const mb = stdout.trim();
-      if (!mb) continue;
-      if (!best) {
-        best = mb;
-        continue;
-      }
-      if (mb === best) continue;
-      // Two different merge-bases: pick the descendant (closer to HEAD).
-      // `--is-ancestor A B` succeeds when A is reachable from B.
-      const aIsAncestor = await exec('git', ['merge-base', '--is-ancestor', best, mb], {
-        cwd: repoRoot,
-      }).then(
-        () => true,
-        () => false,
-      );
-      if (aIsAncestor) best = mb;
-    } catch {
-      /* ref may not resolve — skip */
+  try {
+    const { stdout } = await exec('git', ['merge-base', branch, headRef], { cwd: repoRoot });
+    const result = stdout.trim();
+    if (result) {
+      mergeBaseCache.set(key, { value: result, expiresAt: Date.now() + MERGE_BASE_TTL });
+      return result;
     }
+  } catch {
+    /* branch may not resolve */
   }
 
-  if (!best) {
-    // All merge-base computations failed — fall back to headRef so that
-    // callers diff HEAD against itself (empty diff) rather than diffing
-    // against the branch tip, which would include the base branch's changes.
-    return headRef;
-  }
-
-  mergeBaseCache.set(key, { value: best, expiresAt: Date.now() + MERGE_BASE_TTL });
-  return best;
-}
-
-/**
- * Resolve the main branch tip ref for one-way diff comparisons.
- * Uses the most advanced ref (local or remote) so diffs show only
- * what would actually change when merged into main.
- */
-async function resolveMainTipRef(worktreePath: string, baseBranch?: string): Promise<string> {
-  const branch = baseBranch ?? (await detectMainBranch(worktreePath));
-  return resolveComparisonRef(worktreePath, branch);
+  // Fall back to headRef so callers diff HEAD against itself (empty diff)
+  // rather than diffing against the branch tip.
+  return headRef;
 }
 
 async function pinHead(worktreePath: string): Promise<string> {
@@ -569,37 +506,12 @@ export async function getChangedFiles(
 ): Promise<ChangedFile[]> {
   const headHash = await pinHead(worktreePath);
 
-  // Resolve merge-base (for feature file set) and main tip (for actual diff) in parallel.
-  const [base, mainTip] = await Promise.all([
-    detectMergeBase(worktreePath, headHash, baseBranch).catch(() => headHash),
-    resolveMainTipRef(worktreePath, baseBranch).catch(() => headHash),
-  ]);
+  // Diff merge-base → HEAD: one-way diff showing only what the feature branch changed.
+  const base = await detectMergeBase(worktreePath, headHash, baseBranch).catch(() => headHash);
 
-  // Feature file set: which files the feature branch actually modified (merge-base → HEAD).
-  // Used to filter the main-tip diff so files changed only on main are excluded.
-  let featureFileSet: Set<string> | null = null;
-  if (base !== mainTip) {
-    try {
-      const { stdout } = await exec('git', ['diff', '--name-only', base, headHash], {
-        cwd: worktreePath,
-        maxBuffer: MAX_BUFFER,
-      });
-      featureFileSet = new Set(
-        stdout
-          .split('\n')
-          .map((l) => normalizeStatusPath(l))
-          .filter(Boolean),
-      );
-    } catch {
-      /* fall through — treat as unfiltered */
-    }
-  }
-
-  // Diff main-tip → HEAD: shows what would actually change on main after merge.
-  // When base === mainTip (main hasn't moved), this equals the old merge-base diff.
   let diffStr = '';
   try {
-    const { stdout } = await exec('git', ['diff', '--raw', '--numstat', mainTip, headHash], {
+    const { stdout } = await exec('git', ['diff', '--raw', '--numstat', base, headHash], {
       cwd: worktreePath,
       maxBuffer: MAX_BUFFER,
     });
@@ -610,16 +522,6 @@ export async function getChangedFiles(
 
   const { statusMap: committedStatusMap, numstatMap: committedNumstatMap } =
     parseDiffRawNumstat(diffStr);
-
-  // Filter to feature-branch files only (skip files changed only on main).
-  if (featureFileSet) {
-    for (const p of [...committedNumstatMap.keys()]) {
-      if (!featureFileSet.has(p)) committedNumstatMap.delete(p);
-    }
-    for (const p of [...committedStatusMap.keys()]) {
-      if (!featureFileSet.has(p)) committedStatusMap.delete(p);
-    }
-  }
 
   // git diff --raw --numstat <headHash> — tracked uncommitted changes (HEAD vs working tree).
   // Compares HEAD tree directly to the working tree, so it does not need the index
@@ -712,59 +614,19 @@ export async function getChangedFiles(
 export async function getAllFileDiffs(worktreePath: string, baseBranch?: string): Promise<string> {
   const headHash = await pinHead(worktreePath);
 
-  const [base, mainTip] = await Promise.all([
-    detectMergeBase(worktreePath, headHash, baseBranch).catch(() => headHash),
-    resolveMainTipRef(worktreePath, baseBranch).catch(() => headHash),
-  ]);
+  // Diff merge-base → working tree: one-way diff showing only feature branch changes
+  // (including uncommitted edits).
+  const base = await detectMergeBase(worktreePath, headHash, baseBranch).catch(() => headHash);
 
-  // Build file filter: union of committed feature files + uncommitted tracked files.
-  // This ensures uncommitted-only edits still appear in the diff viewer.
-  let filterFiles: string[] | null = null;
-  if (base !== mainTip) {
-    try {
-      const [committedResult, uncommittedResult] = await Promise.all([
-        exec('git', ['diff', '--name-only', base, headHash], {
-          cwd: worktreePath,
-          maxBuffer: MAX_BUFFER,
-        }),
-        exec('git', ['diff', '--name-only', headHash], {
-          cwd: worktreePath,
-          maxBuffer: MAX_BUFFER,
-        }).catch(() => ({ stdout: '' })),
-      ]);
-
-      const allPaths = new Set<string>();
-      for (const line of committedResult.stdout.split('\n')) {
-        const p = normalizeStatusPath(line);
-        if (p) allPaths.add(p);
-      }
-      for (const line of uncommittedResult.stdout.split('\n')) {
-        const p = normalizeStatusPath(line);
-        if (p) allPaths.add(p);
-      }
-      filterFiles = [...allPaths];
-    } catch {
-      /* fall through — unfiltered */
-    }
-  }
-
-  // Diff main-tip to working tree, filtered to feature-branch + uncommitted files.
-  // When filterFiles is empty, produce no committed diff (avoid phantom main-only diffs).
   let combinedDiff = '';
-  if (filterFiles === null || filterFiles.length > 0) {
-    try {
-      const args = ['diff', '-U3', mainTip];
-      if (filterFiles) {
-        args.push('--', ...filterFiles);
-      }
-      const { stdout } = await exec('git', args, {
-        cwd: worktreePath,
-        maxBuffer: MAX_BUFFER,
-      });
-      combinedDiff = stdout;
-    } catch {
-      /* empty */
-    }
+  try {
+    const { stdout } = await exec('git', ['diff', '-U3', base], {
+      cwd: worktreePath,
+      maxBuffer: MAX_BUFFER,
+    });
+    combinedDiff = stdout;
+  } catch {
+    /* empty */
   }
 
   // Untracked files: build pseudo-diffs
@@ -818,10 +680,7 @@ export async function getAllFileDiffsFromBranch(
   branchName: string,
   baseBranch?: string,
 ): Promise<string> {
-  const mainBranch = await resolveComparisonRef(
-    projectRoot,
-    baseBranch ?? (await detectMainBranch(projectRoot)),
-  );
+  const mainBranch = baseBranch ?? (await detectMainBranch(projectRoot));
   try {
     const { stdout } = await exec('git', ['diff', '-U3', `${mainBranch}...${branchName}`], {
       cwd: projectRoot,
@@ -845,18 +704,18 @@ export async function getFileDiff(
   baseBranch?: string,
 ): Promise<FileDiffResult> {
   const headHash = await pinHead(worktreePath);
-  const mainTip = await resolveMainTipRef(worktreePath, baseBranch).catch(() => headHash);
+  const base = await detectMergeBase(worktreePath, headHash, baseBranch).catch(() => headHash);
 
-  // Old content from main tip (what main currently has)
+  // Old content from merge-base (what existed when the branch was created)
   let oldContent = '';
   try {
-    const { stdout } = await exec('git', ['show', `${mainTip}:${filePath}`], {
+    const { stdout } = await exec('git', ['show', `${base}:${filePath}`], {
       cwd: worktreePath,
       maxBuffer: MAX_BUFFER,
     });
     oldContent = stdout;
   } catch {
-    /* file didn't exist on main — new file */
+    /* file didn't exist at merge-base — new file */
   }
 
   // New content: prefer committed content from HEAD, fall back to disk
@@ -912,10 +771,10 @@ export async function getFileDiff(
     newContent = diskContent;
   }
 
-  // Generate diff between main tip and HEAD for committed files
+  // Generate diff between merge-base and HEAD for committed files
   let diff = '';
   try {
-    const { stdout } = await exec('git', ['diff', mainTip, headHash, '--', filePath], {
+    const { stdout } = await exec('git', ['diff', base, headHash, '--', filePath], {
       cwd: worktreePath,
       maxBuffer: MAX_BUFFER,
     });
@@ -1008,10 +867,7 @@ export async function checkMergeStatus(
   worktreePath: string,
   baseBranch?: string,
 ): Promise<{ main_ahead_count: number; conflicting_files: string[] }> {
-  const mainBranch = await resolveComparisonRef(
-    worktreePath,
-    baseBranch ?? (await detectMainBranch(worktreePath)),
-  );
+  const mainBranch = baseBranch ?? (await detectMainBranch(worktreePath));
 
   let mainAheadCount = 0;
   try {
@@ -1074,10 +930,9 @@ export async function mergeTask(
       }
     }
 
-    const comparisonRef = await resolveComparisonRef(projectRoot, mainBranch);
     const { linesAdded, linesRemoved } = await computeBranchDiffStats(
       projectRoot,
-      comparisonRef,
+      mainBranch,
       branchName,
     );
 
@@ -1167,10 +1022,7 @@ export async function getChangedFilesFromBranch(
   branchName: string,
   baseBranch?: string,
 ): Promise<ChangedFile[]> {
-  const mainBranch = await resolveComparisonRef(
-    projectRoot,
-    baseBranch ?? (await detectMainBranch(projectRoot)),
-  );
+  const mainBranch = baseBranch ?? (await detectMainBranch(projectRoot));
 
   let diffStr = '';
   try {
@@ -1209,10 +1061,7 @@ export async function getFileDiffFromBranch(
   filePath: string,
   baseBranch?: string,
 ): Promise<FileDiffResult> {
-  const mainBranch = await resolveComparisonRef(
-    projectRoot,
-    baseBranch ?? (await detectMainBranch(projectRoot)),
-  );
+  const mainBranch = baseBranch ?? (await detectMainBranch(projectRoot));
 
   let diff = '';
   try {

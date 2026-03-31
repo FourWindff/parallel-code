@@ -718,6 +718,17 @@ export async function getChangedFiles(
     return a.path.localeCompare(b.path);
   });
 
+  const committed = files.filter((f) => f.committed).map((f) => f.path);
+  const uncommitted = files.filter((f) => !f.committed).map((f) => f.path);
+  console.warn(
+    '[getChangedFiles] total=%d committed(%d): %s | uncommitted(%d): %s',
+    files.length,
+    committed.length,
+    committed.join(', '),
+    uncommitted.length,
+    uncommitted.join(', '),
+  );
+
   return files;
 }
 
@@ -735,51 +746,105 @@ export async function getAllFileDiffs(worktreePath: string, baseBranch?: string)
       maxBuffer: MAX_BUFFER,
     });
     combinedDiff = stdout;
-  } catch {
-    /* empty */
+  } catch (err) {
+    console.warn('[getAllFileDiffs] git diff -U3 failed:', err);
   }
+
+  // DEBUG: log files in the raw combined diff before filtering
+  const prFilterFiles = combinedDiff
+    ? combinedDiff
+        .split(/^(?=diff --git )/m)
+        .map((b) => b.match(/^diff --git a\/(.+?) b\/(.+)$/m)?.[2])
+        .filter(Boolean)
+    : [];
+  console.warn(
+    '[getAllFileDiffs] base=%s head=%s combinedDiff files (%d): %s',
+    base.slice(0, 8),
+    headHash.slice(0, 8),
+    prFilterFiles.length,
+    prFilterFiles.join(', '),
+  );
 
   // Filter out file diffs already identical on the main branch tip.
   if (combinedDiff) {
     const tipDiffFiles = await filesDifferingFromMain(worktreePath, headHash, baseBranch);
     if (tipDiffFiles) {
+      console.warn(
+        '[getAllFileDiffs] tipDiffFiles (main vs HEAD): %s',
+        [...tipDiffFiles].join(', '),
+      );
+
       // The diff output compares merge-base to the working tree, but
       // tipDiffFiles only compares committed HEAD vs main.  Files with
       // uncommitted working-tree changes have real diffs and must not be
       // filtered out.
+      let uncommittedOk = false;
       try {
         const { stdout } = await exec('git', ['diff', '--name-only', headHash], {
           cwd: worktreePath,
           maxBuffer: MAX_BUFFER,
         });
+        const uncommittedFiles: string[] = [];
         for (const line of stdout.split('\n')) {
           const p = normalizeStatusPath(line);
-          if (p) tipDiffFiles.add(p);
+          if (p) {
+            tipDiffFiles.add(p);
+            uncommittedFiles.push(p);
+          }
         }
-      } catch {
-        /* empty */
+        uncommittedOk = true;
+        console.warn(
+          '[getAllFileDiffs] uncommitted tracked files: %s',
+          uncommittedFiles.join(', ') || '(none)',
+        );
+      } catch (err) {
+        console.warn('[getAllFileDiffs] git diff --name-only failed, skipping filter:', err);
+        /* If we can't detect uncommitted files, skip filtering entirely
+         * to avoid silently dropping real diffs from the output. */
       }
 
-      combinedDiff = combinedDiff
-        .split(/^(?=diff --git )/m)
-        .filter((block) => {
-          const m = block.match(/^diff --git a\/(.+?) b\/(.+)$/m);
-          return !m || tipDiffFiles.has(m[2]);
-        })
-        .join('');
+      if (uncommittedOk) {
+        console.warn('[getAllFileDiffs] allow-set: %s', [...tipDiffFiles].join(', '));
+        const beforeCount = prFilterFiles.length;
+        combinedDiff = combinedDiff
+          .split(/^(?=diff --git )/m)
+          .filter((block) => {
+            const m = block.match(/^diff --git a\/(.+?) b\/(.+)$/m);
+            if (m && !tipDiffFiles.has(m[2])) {
+              console.warn('[getAllFileDiffs] FILTERED OUT: %s', m[2]);
+              return false;
+            }
+            return true;
+          })
+          .join('');
+        const afterFiles = combinedDiff
+          .split(/^(?=diff --git )/m)
+          .map((b) => b.match(/^diff --git a\/(.+?) b\/(.+)$/m)?.[2])
+          .filter(Boolean);
+        console.warn(
+          '[getAllFileDiffs] after filter: %d -> %d files',
+          beforeCount,
+          afterFiles.length,
+        );
+      } else {
+        console.warn('[getAllFileDiffs] filter SKIPPED (uncommitted detection failed)');
+      }
+    } else {
+      console.warn('[getAllFileDiffs] tipDiffFiles=null, no filtering applied');
     }
   }
 
-  // Untracked files: build pseudo-diffs
+  // Untracked files: build pseudo-diffs.
+  // Use git ls-files (not git status) so it works even when the index
+  // write lock is held by an agent process.
   const untrackedParts: string[] = [];
   try {
-    const { stdout } = await exec('git', ['status', '--porcelain'], {
+    const { stdout } = await exec('git', ['ls-files', '--others', '--exclude-standard'], {
       cwd: worktreePath,
       maxBuffer: MAX_BUFFER,
     });
     for (const line of stdout.split('\n')) {
-      if (!line.startsWith('??')) continue;
-      const filePath = normalizeStatusPath(line.slice(3));
+      const filePath = normalizeStatusPath(line);
       if (!filePath) continue;
       const fullPath = path.join(worktreePath, filePath);
       try {
@@ -808,11 +873,31 @@ export async function getAllFileDiffs(worktreePath: string, baseBranch?: string)
         /* skip unreadable files */
       }
     }
-  } catch {
-    /* empty */
+  } catch (err) {
+    console.warn('[getAllFileDiffs] git ls-files --others failed:', err);
   }
 
+  const untrackedFileNames = untrackedParts
+    .map((p) => p.match(/^diff --git a\/(.+?) b\/(.+)$/m)?.[2])
+    .filter(Boolean);
+  console.warn(
+    '[getAllFileDiffs] untracked files (%d): %s',
+    untrackedFileNames.length,
+    untrackedFileNames.join(', ') || '(none)',
+  );
+
   const parts = [combinedDiff, untrackedParts.join('')].filter((p) => p.length > 0);
+  const finalFiles = parts
+    .join('\n')
+    .split(/^(?=diff --git )/m)
+    .map((b) => b.match(/^diff --git a\/(.+?) b\/(.+)$/m)?.[2])
+    .filter(Boolean);
+  console.warn(
+    '[getAllFileDiffs] FINAL output files (%d): %s',
+    finalFiles.length,
+    finalFiles.join(', '),
+  );
+
   return parts.join('\n');
 }
 
@@ -821,6 +906,10 @@ export async function getAllFileDiffsFromBranch(
   branchName: string,
   baseBranch?: string,
 ): Promise<string> {
+  console.warn(
+    '[getAllFileDiffsFromBranch] USING BRANCH FALLBACK for %s (committed only!)',
+    branchName,
+  );
   const mainBranch = baseBranch ?? (await detectMainBranch(projectRoot));
   try {
     const { stdout } = await exec('git', ['diff', '-U3', `${mainBranch}...${branchName}`], {

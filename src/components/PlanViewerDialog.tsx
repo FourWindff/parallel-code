@@ -1,4 +1,4 @@
-import { Show, For, createSignal, createEffect } from 'solid-js';
+import { Show, For, createSignal, createEffect, onCleanup } from 'solid-js';
 import { Dialog } from './Dialog';
 import { createDialogScroll } from '../lib/dialog-scroll';
 import { ReviewProvider, useReview } from './ReviewProvider';
@@ -69,6 +69,19 @@ export function PlanViewerDialog(props: PlanViewerDialogProps) {
   );
 }
 
+let mermaidReady: Promise<(typeof import('mermaid'))['default']> | null = null;
+let mermaidIdCounter = 0;
+
+function getMermaid() {
+  if (!mermaidReady) {
+    mermaidReady = import('mermaid').then(({ default: m }) => {
+      m.initialize({ startOnLoad: false, theme: 'dark', securityLevel: 'strict' });
+      return m;
+    });
+  }
+  return mermaidReady;
+}
+
 interface PlanViewerContentProps {
   planContent: string;
   planFileName: string;
@@ -106,16 +119,27 @@ function PlanViewerContent(props: PlanViewerContentProps) {
     if (!contentRef) return;
     const blocks = contentRef.querySelectorAll('.mermaid-block');
     if (blocks.length === 0) return;
-    import('mermaid').then(({ default: mermaid }) => {
-      mermaid.initialize({ startOnLoad: false, theme: 'dark' });
-      blocks.forEach((el, i) => {
+    let cancelled = false;
+    onCleanup(() => {
+      cancelled = true;
+    });
+    getMermaid().then((mermaid) => {
+      if (cancelled) return;
+      blocks.forEach((el) => {
         const source = el.getAttribute('data-mermaid');
         if (!source) return;
-        const id = `mermaid-plan-${Date.now()}-${i}`;
-        mermaid.render(id, source).then(({ svg }) => {
-          el.innerHTML = svg;
-          el.classList.add('mermaid-rendered');
-        });
+        const id = `mermaid-${mermaidIdCounter++}`;
+        mermaid
+          .render(id, source)
+          .then(({ svg }) => {
+            if (!cancelled && el.isConnected) {
+              el.innerHTML = svg;
+              el.classList.add('mermaid-rendered');
+            }
+          })
+          .catch(() => {
+            // Keep raw source visible on syntax errors
+          });
       });
     });
   });

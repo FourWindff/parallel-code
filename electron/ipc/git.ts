@@ -743,6 +743,23 @@ export async function getAllFileDiffs(worktreePath: string, baseBranch?: string)
   if (combinedDiff) {
     const tipDiffFiles = await filesDifferingFromMain(worktreePath, headHash, baseBranch);
     if (tipDiffFiles) {
+      // The diff output compares merge-base to the working tree, but
+      // tipDiffFiles only compares committed HEAD vs main.  Files with
+      // uncommitted working-tree changes have real diffs and must not be
+      // filtered out.
+      try {
+        const { stdout } = await exec('git', ['diff', '--name-only', headHash], {
+          cwd: worktreePath,
+          maxBuffer: MAX_BUFFER,
+        });
+        for (const line of stdout.split('\n')) {
+          const p = normalizeStatusPath(line);
+          if (p) tipDiffFiles.add(p);
+        }
+      } catch {
+        /* empty */
+      }
+
       combinedDiff = combinedDiff
         .split(/^(?=diff --git )/m)
         .filter((block) => {

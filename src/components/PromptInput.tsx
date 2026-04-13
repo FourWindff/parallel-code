@@ -328,7 +328,7 @@ export function PromptInput(props: PromptInputProps) {
     if (!val) {
       if (mode === 'auto') return;
       fireAndForget(IPC.WriteToAgent, { agentId: props.agentId, data: '\r' });
-      setTaskLastInputAt(props.taskId, new Date().toISOString());
+      setTaskLastInputAt(props.taskId);
       return;
     }
 

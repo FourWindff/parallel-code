@@ -19,13 +19,14 @@ function statusColor(status: string): string {
   return STATUS_COLORS[status] ?? theme.fgMuted;
 }
 
+/** Append Z when no timezone is present — ISO strings without TZ are parsed as local time. */
+function normalizeIsoTimestamp(ts: string): string {
+  return ts.endsWith('Z') || /[+-]\d{2}:/.test(ts.slice(-6)) ? ts : ts + 'Z';
+}
+
 function relativeTime(timestamp: string): string {
   const now = Date.now();
-  // Append Z if no timezone is specified — ISO strings without timezone are
-  // parsed as local time by JS, which causes wrong relative times in non-UTC zones.
-  const ts =
-    timestamp.endsWith('Z') || /[+-]\d{2}:/.test(timestamp.slice(-6)) ? timestamp : timestamp + 'Z';
-  const then = new Date(ts).getTime();
+  const then = new Date(normalizeIsoTimestamp(timestamp)).getTime();
   if (isNaN(then)) return '';
   const diffMs = now - then;
   if (diffMs < 60_000) return 'just now';
@@ -92,17 +93,13 @@ export function TaskStepsSection(props: TaskStepsSectionProps) {
     if (s.length <= 1) return [];
     return s.slice(0, -1);
   });
-  const isInteracting = () => {
+  const isInteracting = createMemo(() => {
     const li = props.task.lastInputAt;
     if (!li) return false;
     const last = latestStep();
     if (!last) return true;
-    const stepTs =
-      last.timestamp.endsWith('Z') || /[+-]\d{2}:/.test(last.timestamp.slice(-6))
-        ? last.timestamp
-        : last.timestamp + 'Z';
-    return new Date(li) > new Date(stepTs);
-  };
+    return new Date(li) > new Date(normalizeIsoTimestamp(last.timestamp));
+  });
 
   createEffect(() => {
     const len = steps().length;
@@ -217,13 +214,12 @@ export function TaskStepsSection(props: TaskStepsSectionProps) {
               <div style={{ display: 'flex', 'flex-direction': 'column', gap: '2px' }}>
                 <For each={historySteps()}>
                   {(step, idx) => {
-                    const originalIndex = () => idx();
-                    const isExpanded = () => expandedHistory().has(originalIndex());
+                    const isExpanded = () => expandedHistory().has(idx());
 
                     return (
                       <div>
                         <div
-                          onClick={() => toggleHistory(originalIndex())}
+                          onClick={() => toggleHistory(idx())}
                           style={{
                             display: 'flex',
                             'align-items': 'center',
@@ -249,7 +245,7 @@ export function TaskStepsSection(props: TaskStepsSectionProps) {
                               'text-align': 'right',
                             }}
                           >
-                            {originalIndex() + 1}
+                            {idx() + 1}
                           </span>
                           <span
                             style={{

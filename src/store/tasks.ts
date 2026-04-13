@@ -360,7 +360,7 @@ export function updateTaskNotes(taskId: string, notes: string): void {
 export async function sendPrompt(taskId: string, agentId: string, text: string): Promise<void> {
   // Send text and Enter separately so TUI apps (Claude Code, Codex)
   // don't treat the \r as part of a pasted block
-  setStore('tasks', taskId, 'lastInputAt', new Date().toISOString());
+  setTaskLastInputAt(taskId);
   await writeToAgentWhenReady(agentId, text);
   await new Promise((r) => setTimeout(r, 50));
   await writeToAgentWhenReady(agentId, '\r');
@@ -611,8 +611,8 @@ export function setStepsContent(taskId: string, steps: unknown[] | null): void {
   );
 }
 
-export function setTaskLastInputAt(taskId: string, timestamp: string): void {
-  setStore('tasks', taskId, 'lastInputAt', timestamp);
+export function setTaskLastInputAt(taskId: string): void {
+  setStore('tasks', taskId, 'lastInputAt', new Date().toISOString());
 }
 
 /** Toggles steps tracking for a task and remembers the choice as the new default. */

@@ -204,7 +204,7 @@ export function ResizablePanel(props: ResizablePanelProps) {
 
   function findResizable(start: number, direction: -1 | 1): number {
     for (let i = start; i >= 0 && i < props.children.length; i += direction) {
-      if (!props.children[i].fixed) return i;
+      if (!props.children[i].fixed && !props.children[i].stable) return i;
     }
     return -1;
   }

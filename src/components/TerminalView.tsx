@@ -385,7 +385,7 @@ export function TerminalView(props: TerminalViewProps) {
       }
       fireAndForget(IPC.WriteToAgent, { agentId, data });
       if (!props.isShell && (data.includes('\r') || data.includes('\n'))) {
-        setTaskLastInputAt(props.taskId, new Date().toISOString());
+        setTaskLastInputAt(props.taskId);
       }
     }
 

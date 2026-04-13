@@ -1,4 +1,4 @@
-import { Show, For, createSignal, createMemo, onMount } from 'solid-js';
+import { Show, For, createSignal, createMemo, createEffect, onMount } from 'solid-js';
 import { theme } from '../lib/theme';
 import { sf } from '../lib/fontScale';
 import { badgeStyle } from '../lib/badgeStyle';
@@ -86,7 +86,14 @@ export function TaskStepsSection(props: TaskStepsSectionProps) {
   const historySteps = createMemo(() => {
     const s = steps();
     if (s.length <= 1) return [];
-    return s.slice(0, -1).reverse();
+    return s.slice(0, -1);
+  });
+
+  createEffect(() => {
+    const len = steps().length;
+    if (len > 0 && scrollRef) {
+      scrollRef.scrollTop = scrollRef.scrollHeight;
+    }
   });
 
   function toggleHistory(originalIndex: number) {
@@ -172,15 +179,113 @@ export function TaskStepsSection(props: TaskStepsSectionProps) {
               outline: 'none',
             }}
           >
-            {/* Latest step — always expanded */}
+            {/* History — collapsible entries */}
+            <Show when={historySteps().length > 0}>
+              <div style={{ display: 'flex', 'flex-direction': 'column', gap: '2px' }}>
+                <For each={historySteps()}>
+                  {(step, idx) => {
+                    const originalIndex = () => idx();
+                    const isExpanded = () => expandedHistory().has(originalIndex());
+
+                    return (
+                      <div>
+                        <div
+                          onClick={() => toggleHistory(originalIndex())}
+                          style={{
+                            display: 'flex',
+                            'align-items': 'center',
+                            gap: '6px',
+                            padding: '3px 6px 3px 0',
+                            cursor: 'pointer',
+                            'border-radius': '4px',
+                            'user-select': 'none',
+                          }}
+                          onMouseEnter={(e) => {
+                            e.currentTarget.style.background = `color-mix(in srgb, ${theme.fgMuted} 8%, transparent)`;
+                          }}
+                          onMouseLeave={(e) => {
+                            e.currentTarget.style.background = 'transparent';
+                          }}
+                        >
+                          <span
+                            style={{
+                              'font-size': sf(9),
+                              color: theme.fgSubtle,
+                              'flex-shrink': '0',
+                              width: '20px',
+                              'text-align': 'right',
+                            }}
+                          >
+                            {originalIndex() + 1}
+                          </span>
+                          <span
+                            style={{
+                              ...badgeStyle(statusColor(String(step.status ?? ''))),
+                              'font-size': sf(9),
+                              padding: '1px 5px',
+                            }}
+                          >
+                            {String(step.status ?? '').replaceAll('_', ' ')}
+                          </span>
+                          <span
+                            style={{
+                              'font-size': sf(11),
+                              'font-weight': '600',
+                              color: theme.fg,
+                              overflow: 'hidden',
+                              'text-overflow': 'ellipsis',
+                              'white-space': 'nowrap',
+                              flex: '1',
+                            }}
+                          >
+                            {step.summary}
+                          </span>
+                        </div>
+
+                        <Show when={isExpanded()}>
+                          <div
+                            style={{
+                              'margin-left': '32px',
+                              padding: '4px 8px',
+                              'font-size': sf(11),
+                              color: theme.fgMuted,
+                              'border-left': `2px solid ${theme.border}`,
+                            }}
+                          >
+                            <Show when={step.detail}>
+                              <div style={{ 'margin-bottom': '4px' }}>{step.detail}</div>
+                            </Show>
+                            <Show when={step.files_touched && step.files_touched.length > 0}>
+                              <div
+                                style={{
+                                  display: 'flex',
+                                  'flex-wrap': 'wrap',
+                                  gap: '3px',
+                                }}
+                              >
+                                <For each={step.files_touched}>
+                                  {(file) => (
+                                    <FileBadge file={file} onFileClick={props.onFileClick} />
+                                  )}
+                                </For>
+                              </div>
+                            </Show>
+                          </div>
+                        </Show>
+                      </div>
+                    );
+                  }}
+                </For>
+              </div>
+            </Show>
+
+            {/* Latest step — always expanded, anchored at bottom */}
             <Show when={latestStep()}>
               {(step) => (
                 <div
                   style={{
-                    background: theme.bgElevated,
                     'border-radius': '6px',
                     padding: '8px 10px',
-                    border: `1px solid ${theme.border}`,
                   }}
                 >
                   <div
@@ -215,7 +320,7 @@ export function TaskStepsSection(props: TaskStepsSectionProps) {
                   <Show when={step().detail}>
                     <div
                       style={{
-                        'font-size': sf(10),
+                        'font-size': sf(11),
                         color: theme.fgMuted,
                         'margin-top': '4px',
                         'line-height': '1.4',
@@ -240,105 +345,6 @@ export function TaskStepsSection(props: TaskStepsSectionProps) {
                   </Show>
                 </div>
               )}
-            </Show>
-
-            {/* History — collapsible entries */}
-            <Show when={historySteps().length > 0}>
-              <div style={{ display: 'flex', 'flex-direction': 'column', gap: '2px' }}>
-                <For each={historySteps()}>
-                  {(step, reversedIdx) => {
-                    const originalIndex = () => steps().length - 2 - reversedIdx();
-                    const isExpanded = () => expandedHistory().has(originalIndex());
-
-                    return (
-                      <div>
-                        <div
-                          onClick={() => toggleHistory(originalIndex())}
-                          style={{
-                            display: 'flex',
-                            'align-items': 'center',
-                            gap: '6px',
-                            padding: '3px 6px',
-                            cursor: 'pointer',
-                            'border-radius': '4px',
-                            'user-select': 'none',
-                          }}
-                          onMouseEnter={(e) => {
-                            e.currentTarget.style.background = `color-mix(in srgb, ${theme.fgMuted} 8%, transparent)`;
-                          }}
-                          onMouseLeave={(e) => {
-                            e.currentTarget.style.background = 'transparent';
-                          }}
-                        >
-                          <span
-                            style={{
-                              'font-size': sf(9),
-                              color: theme.fgSubtle,
-                              'flex-shrink': '0',
-                              width: '20px',
-                              'text-align': 'right',
-                            }}
-                          >
-                            {originalIndex() + 1}
-                          </span>
-                          <span
-                            style={{
-                              ...badgeStyle(statusColor(String(step.status ?? ''))),
-                              'font-size': sf(9),
-                              padding: '1px 5px',
-                            }}
-                          >
-                            {String(step.status ?? '').replaceAll('_', ' ')}
-                          </span>
-                          <span
-                            style={{
-                              'font-size': sf(10),
-                              color: theme.fgMuted,
-                              overflow: 'hidden',
-                              'text-overflow': 'ellipsis',
-                              'white-space': 'nowrap',
-                              flex: '1',
-                            }}
-                          >
-                            {step.summary}
-                          </span>
-                        </div>
-
-                        <Show when={isExpanded()}>
-                          <div
-                            style={{
-                              'margin-left': '32px',
-                              padding: '4px 8px',
-                              'font-size': sf(10),
-                              color: theme.fgMuted,
-                              'border-left': `2px solid ${theme.border}`,
-                            }}
-                          >
-                            <Show when={step.detail}>
-                              <div style={{ 'margin-bottom': '4px' }}>{step.detail}</div>
-                            </Show>
-                            <Show when={step.files_touched && step.files_touched.length > 0}>
-                              <div
-                                style={{
-                                  display: 'flex',
-                                  'flex-wrap': 'wrap',
-                                  gap: '3px',
-                                }}
-                              >
-                                <For each={step.files_touched}>
-                                  {(file) => (
-                                    <FileBadge file={file} onFileClick={props.onFileClick} />
-                                  )}
-                                </For>
-                              </div>
-                            </Show>
-                          </div>
-                        </Show>
-                      </div>
-                    );
-                  }}
-                </For>
-              </div>
             </Show>
           </div>
         </Show>

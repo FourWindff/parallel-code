@@ -157,7 +157,7 @@ export function TaskPanel(props: TaskPanelProps) {
       get fixed() {
         return !props.task.stepsContent?.length;
       },
-      requestSize: () => (props.task.stepsContent?.length ? 90 : 28),
+      requestSize: () => (props.task.stepsContent?.length ? 110 : 28),
       content: () => (
         <TaskStepsSection
           task={props.task}
@@ -265,10 +265,10 @@ export function TaskPanel(props: TaskPanelProps) {
         children={[
           titleBar(),
           branchInfoBar(),
-          ...(props.task.stepsEnabled ? [stepsSection()] : []),
           notesAndFiles(),
           shellSection(),
           aiTerminal(),
+          ...(props.task.stepsEnabled ? [stepsSection()] : []),
           ...(store.showPromptInput ? [promptInput()] : []),
         ]}
       />

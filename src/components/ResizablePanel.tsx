@@ -177,10 +177,11 @@ export function ResizablePanel(props: ResizablePanelProps) {
       if (Math.abs(next[i] - requested) < 1) continue;
 
       const diff = requested - next[i];
-      // Find nearest resizable neighbor to absorb the difference
+      // Find nearest resizable neighbor to absorb the difference.
+      // Skip fixed and stable panels — only truly resizable panels give/take space.
       let absorbed = false;
       for (let j = i + 1; j < props.children.length; j++) {
-        if (!props.children[j].fixed) {
+        if (!props.children[j].fixed && !props.children[j].stable) {
           next[j] = Math.max(props.children[j].minSize ?? 30, next[j] - diff);
           absorbed = true;
           break;
@@ -188,7 +189,7 @@ export function ResizablePanel(props: ResizablePanelProps) {
       }
       if (!absorbed) {
         for (let j = i - 1; j >= 0; j--) {
-          if (!props.children[j].fixed) {
+          if (!props.children[j].fixed && !props.children[j].stable) {
             next[j] = Math.max(props.children[j].minSize ?? 30, next[j] - diff);
             break;
           }

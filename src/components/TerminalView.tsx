@@ -45,6 +45,7 @@ interface TerminalViewProps {
   cwd: string;
   env?: Record<string, string>;
   isShell?: boolean;
+  stepsEnabled?: boolean;
   dockerMode?: boolean;
   dockerImage?: string;
   onExit?: (exitInfo: {
@@ -475,6 +476,7 @@ export function TerminalView(props: TerminalViewProps) {
       cols: term.cols,
       rows: term.rows,
       isShell: props.isShell,
+      stepsEnabled: props.stepsEnabled,
       dockerMode: props.dockerMode,
       dockerImage: props.dockerImage,
       onOutput,

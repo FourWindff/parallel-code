@@ -49,6 +49,8 @@ export {
   setNewTaskDropUrl,
   setNewTaskPrefillPrompt,
   setPlanContent,
+  setStepsContent,
+  setTaskStepsEnabled,
 } from './tasks';
 export {
   setActiveTask,
@@ -93,7 +95,6 @@ export {
   toggleSidebar,
   toggleArena,
   setTerminalFont,
-  setTerminalFontSize,
   setThemePreset,
   setAutoTrustFolders,
   setShowPlans,

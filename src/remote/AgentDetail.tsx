@@ -11,22 +11,6 @@ import {
   status,
 } from './ws';
 
-/**
- * Scroll-safe fit: preserves viewport scroll position across fit() calls.
- * Same workaround as terminalFitManager (xtermjs/xterm.js#5096).
- */
-function safeFit(t: Terminal, fa: FitAddon): void {
-  const buf = t.buffer.active;
-  const wasAtBottom = buf.viewportY >= buf.baseY;
-  const savedViewportY = buf.viewportY;
-  fa.fit();
-  if (wasAtBottom) {
-    t.scrollToBottom();
-  } else if (buf.viewportY !== savedViewportY) {
-    t.scrollToLine(Math.min(savedViewportY, buf.baseY));
-  }
-}
-
 // Base64 decode (same approach as desktop)
 const B64 = new Uint8Array(128);
 for (let i = 0; i < 64; i++) {
@@ -149,17 +133,13 @@ export function AgentDetail(props: AgentDetailProps) {
     let resizeRaf = 0;
     const observer = new ResizeObserver(() => {
       cancelAnimationFrame(resizeRaf);
-      resizeRaf = requestAnimationFrame(() => {
-        if (term && fitAddon) safeFit(term, fitAddon);
-      });
+      resizeRaf = requestAnimationFrame(() => fitAddon?.fit());
     });
     observer.observe(termContainer);
 
     // Refit terminal when soft keyboard opens/closes on mobile
     if (window.visualViewport) {
-      const onViewportResize = () => {
-        if (term && fitAddon) safeFit(term, fitAddon);
-      };
+      const onViewportResize = () => fitAddon?.fit();
       window.visualViewport.addEventListener('resize', onViewportResize);
       onCleanup(() => window.visualViewport?.removeEventListener('resize', onViewportResize));
     }
@@ -472,7 +452,7 @@ export function AgentDetail(props: AgentDetailProps) {
                 setTermFontSize(next);
                 if (term) {
                   term.options.fontSize = next;
-                  if (fitAddon) safeFit(term, fitAddon);
+                  fitAddon?.fit();
                 }
               }}
               disabled={termFontSize() <= MIN_FONT}
@@ -499,7 +479,7 @@ export function AgentDetail(props: AgentDetailProps) {
                 setTermFontSize(next);
                 if (term) {
                   term.options.fontSize = next;
-                  if (fitAddon) safeFit(term, fitAddon);
+                  fitAddon?.fit();
                 }
               }}
               disabled={termFontSize() >= MAX_FONT}

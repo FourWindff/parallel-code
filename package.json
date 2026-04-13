@@ -64,12 +64,6 @@
     "vitest": "^4.0.18",
     "wait-on": "^9.0.4"
   },
-  "overrides": {
-    "flatted": ">=3.4.2",
-    "dompurify": "$dompurify",
-    "picomatch@2": ">=2.3.2",
-    "picomatch@4": ">=4.0.4"
-  },
   "lint-staged": {
     "*.{ts,tsx}": [
       "eslint --max-warnings 0",

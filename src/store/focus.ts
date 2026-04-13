@@ -49,7 +49,12 @@ function buildGrid(panelId: string): string[][] {
     const bookmarkCount =
       store.projects.find((p) => p.id === task.projectId)?.terminalBookmarks?.length ?? 0;
     const toolbarCols = Array.from({ length: 1 + bookmarkCount }, (_, i) => `shell-toolbar:${i}`);
-    const grid: string[][] = [['title'], ['notes', 'changed-files'], toolbarCols];
+    const grid: string[][] = [['title']];
+    if (task.stepsEnabled) {
+      grid.push(['steps']);
+    }
+    grid.push(['notes', 'changed-files']);
+    grid.push(toolbarCols);
     if (task.shellAgentIds.length > 0) {
       grid.push(task.shellAgentIds.map((_, i) => `shell:${i}`));
     }

@@ -237,68 +237,6 @@ async function detectMergeBase(
   return headRef;
 }
 
-/**
- * Get the set of file paths that actually differ between two refs.
- * Used to filter merge-base diffs: excludes files where the branch's changes
- * have already been merged/cherry-picked into main.
- */
-async function filesDifferingBetween(
-  repoRoot: string,
-  refA: string,
-  refB?: string,
-): Promise<Set<string> | null> {
-  try {
-    const args = ['diff', '--name-only', refA];
-    if (refB) args.push(refB);
-    const { stdout } = await exec('git', args, { cwd: repoRoot, maxBuffer: MAX_BUFFER });
-    return new Set(
-      stdout
-        .split('\n')
-        .map((l) => normalizeStatusPath(l))
-        .filter(Boolean),
-    );
-  } catch {
-    return null; // could not resolve — skip filtering
-  }
-}
-
-/**
- * Get the set of files that genuinely differ between a branch head and main,
- * checking against both the local main branch and origin/<main> (if it exists).
- * A file is filtered out if it's identical to *either* ref — meaning its
- * changes have already been merged/cherry-picked into at least one of them.
- * Returns null if unable to determine (skip filtering).
- */
-async function filesDifferingFromMain(
-  repoRoot: string,
-  headRef: string,
-  baseBranch?: string,
-): Promise<Set<string> | null> {
-  const branch = baseBranch ?? (await detectMainBranch(repoRoot));
-
-  const refs: string[] = [branch];
-  if (!branch.includes('/') && (await remoteTrackingRefExists(repoRoot, branch))) {
-    refs.push(`origin/${branch}`);
-  }
-
-  const results = await Promise.all(
-    refs.map((ref) => filesDifferingBetween(repoRoot, ref, headRef)),
-  );
-
-  const validSets = results.filter((s): s is Set<string> => s !== null);
-  if (validSets.length === 0) return null;
-  if (validSets.length === 1) return validSets[0];
-
-  // Intersection: keep only files that differ from ALL main refs.
-  // If a file is identical to any main ref, its changes are already there.
-  const [first, ...rest] = validSets;
-  const intersection = new Set<string>();
-  for (const p of first) {
-    if (rest.every((s) => s.has(p))) intersection.add(p);
-  }
-  return intersection;
-}
-
 async function pinHead(worktreePath: string): Promise<string> {
   try {
     const { stdout } = await exec('git', ['rev-parse', 'HEAD'], { cwd: worktreePath });
@@ -620,19 +558,6 @@ export async function getChangedFiles(
   const { statusMap: committedStatusMap, numstatMap: committedNumstatMap } =
     parseDiffRawNumstat(diffStr);
 
-  // Filter out committed files whose content is already identical on the main
-  // branch tip (e.g. merged or cherry-picked). Only files that still differ
-  // from main should appear in the changed files list.
-  const tipDiffFiles = await filesDifferingFromMain(worktreePath, headHash, baseBranch);
-  if (tipDiffFiles) {
-    for (const p of [...committedNumstatMap.keys()]) {
-      if (!tipDiffFiles.has(p)) committedNumstatMap.delete(p);
-    }
-    for (const p of [...committedStatusMap.keys()]) {
-      if (!tipDiffFiles.has(p)) committedStatusMap.delete(p);
-    }
-  }
-
   // git diff --raw --numstat <headHash> — tracked uncommitted changes (HEAD vs working tree).
   // Compares HEAD tree directly to the working tree, so it does not need the index
   // write lock and works reliably even while an agent holds it.
@@ -718,17 +643,6 @@ export async function getChangedFiles(
     return a.path.localeCompare(b.path);
   });
 
-  const committed = files.filter((f) => f.committed).map((f) => f.path);
-  const uncommitted = files.filter((f) => !f.committed).map((f) => f.path);
-  console.warn(
-    '[getChangedFiles] total=%d committed(%d): %s | uncommitted(%d): %s',
-    files.length,
-    committed.length,
-    committed.join(', '),
-    uncommitted.length,
-    uncommitted.join(', '),
-  );
-
   return files;
 }
 
@@ -746,105 +660,20 @@ export async function getAllFileDiffs(worktreePath: string, baseBranch?: string)
       maxBuffer: MAX_BUFFER,
     });
     combinedDiff = stdout;
-  } catch (err) {
-    console.warn('[getAllFileDiffs] git diff -U3 failed:', err);
+  } catch {
+    /* empty */
   }
 
-  // DEBUG: log files in the raw combined diff before filtering
-  const prFilterFiles = combinedDiff
-    ? combinedDiff
-        .split(/^(?=diff --git )/m)
-        .map((b) => b.match(/^diff --git a\/(.+?) b\/(.+)$/m)?.[2])
-        .filter(Boolean)
-    : [];
-  console.warn(
-    '[getAllFileDiffs] base=%s head=%s combinedDiff files (%d): %s',
-    base.slice(0, 8),
-    headHash.slice(0, 8),
-    prFilterFiles.length,
-    prFilterFiles.join(', '),
-  );
-
-  // Filter out file diffs already identical on the main branch tip.
-  if (combinedDiff) {
-    const tipDiffFiles = await filesDifferingFromMain(worktreePath, headHash, baseBranch);
-    if (tipDiffFiles) {
-      console.warn(
-        '[getAllFileDiffs] tipDiffFiles (main vs HEAD): %s',
-        [...tipDiffFiles].join(', '),
-      );
-
-      // The diff output compares merge-base to the working tree, but
-      // tipDiffFiles only compares committed HEAD vs main.  Files with
-      // uncommitted working-tree changes have real diffs and must not be
-      // filtered out.
-      let uncommittedOk = false;
-      try {
-        const { stdout } = await exec('git', ['diff', '--name-only', headHash], {
-          cwd: worktreePath,
-          maxBuffer: MAX_BUFFER,
-        });
-        const uncommittedFiles: string[] = [];
-        for (const line of stdout.split('\n')) {
-          const p = normalizeStatusPath(line);
-          if (p) {
-            tipDiffFiles.add(p);
-            uncommittedFiles.push(p);
-          }
-        }
-        uncommittedOk = true;
-        console.warn(
-          '[getAllFileDiffs] uncommitted tracked files: %s',
-          uncommittedFiles.join(', ') || '(none)',
-        );
-      } catch (err) {
-        console.warn('[getAllFileDiffs] git diff --name-only failed, skipping filter:', err);
-        /* If we can't detect uncommitted files, skip filtering entirely
-         * to avoid silently dropping real diffs from the output. */
-      }
-
-      if (uncommittedOk) {
-        console.warn('[getAllFileDiffs] allow-set: %s', [...tipDiffFiles].join(', '));
-        const beforeCount = prFilterFiles.length;
-        combinedDiff = combinedDiff
-          .split(/^(?=diff --git )/m)
-          .filter((block) => {
-            const m = block.match(/^diff --git a\/(.+?) b\/(.+)$/m);
-            if (m && !tipDiffFiles.has(m[2])) {
-              console.warn('[getAllFileDiffs] FILTERED OUT: %s', m[2]);
-              return false;
-            }
-            return true;
-          })
-          .join('');
-        const afterFiles = combinedDiff
-          .split(/^(?=diff --git )/m)
-          .map((b) => b.match(/^diff --git a\/(.+?) b\/(.+)$/m)?.[2])
-          .filter(Boolean);
-        console.warn(
-          '[getAllFileDiffs] after filter: %d -> %d files',
-          beforeCount,
-          afterFiles.length,
-        );
-      } else {
-        console.warn('[getAllFileDiffs] filter SKIPPED (uncommitted detection failed)');
-      }
-    } else {
-      console.warn('[getAllFileDiffs] tipDiffFiles=null, no filtering applied');
-    }
-  }
-
-  // Untracked files: build pseudo-diffs.
-  // Use git ls-files (not git status) so it works even when the index
-  // write lock is held by an agent process.
+  // Untracked files: build pseudo-diffs
   const untrackedParts: string[] = [];
   try {
-    const { stdout } = await exec('git', ['ls-files', '--others', '--exclude-standard'], {
+    const { stdout } = await exec('git', ['status', '--porcelain'], {
       cwd: worktreePath,
       maxBuffer: MAX_BUFFER,
     });
     for (const line of stdout.split('\n')) {
-      const filePath = normalizeStatusPath(line);
+      if (!line.startsWith('??')) continue;
+      const filePath = normalizeStatusPath(line.slice(3));
       if (!filePath) continue;
       const fullPath = path.join(worktreePath, filePath);
       try {
@@ -873,31 +702,11 @@ export async function getAllFileDiffs(worktreePath: string, baseBranch?: string)
         /* skip unreadable files */
       }
     }
-  } catch (err) {
-    console.warn('[getAllFileDiffs] git ls-files --others failed:', err);
+  } catch {
+    /* empty */
   }
 
-  const untrackedFileNames = untrackedParts
-    .map((p) => p.match(/^diff --git a\/(.+?) b\/(.+)$/m)?.[2])
-    .filter(Boolean);
-  console.warn(
-    '[getAllFileDiffs] untracked files (%d): %s',
-    untrackedFileNames.length,
-    untrackedFileNames.join(', ') || '(none)',
-  );
-
   const parts = [combinedDiff, untrackedParts.join('')].filter((p) => p.length > 0);
-  const finalFiles = parts
-    .join('\n')
-    .split(/^(?=diff --git )/m)
-    .map((b) => b.match(/^diff --git a\/(.+?) b\/(.+)$/m)?.[2])
-    .filter(Boolean);
-  console.warn(
-    '[getAllFileDiffs] FINAL output files (%d): %s',
-    finalFiles.length,
-    finalFiles.join(', '),
-  );
-
   return parts.join('\n');
 }
 
@@ -906,29 +715,12 @@ export async function getAllFileDiffsFromBranch(
   branchName: string,
   baseBranch?: string,
 ): Promise<string> {
-  console.warn(
-    '[getAllFileDiffsFromBranch] USING BRANCH FALLBACK for %s (committed only!)',
-    branchName,
-  );
   const mainBranch = baseBranch ?? (await detectMainBranch(projectRoot));
   try {
     const { stdout } = await exec('git', ['diff', '-U3', `${mainBranch}...${branchName}`], {
       cwd: projectRoot,
       maxBuffer: MAX_BUFFER,
     });
-
-    // Filter out file diffs already identical on the main branch tip.
-    const tipDiffFiles = await filesDifferingFromMain(projectRoot, branchName, baseBranch);
-    if (tipDiffFiles) {
-      return stdout
-        .split(/^(?=diff --git )/m)
-        .filter((block) => {
-          const m = block.match(/^diff --git a\/(.+?) b\/(.+)$/m);
-          return !m || tipDiffFiles.has(m[2]);
-        })
-        .join('');
-    }
-
     return stdout;
   } catch {
     return '';
@@ -1280,17 +1072,6 @@ export async function getChangedFilesFromBranch(
   }
 
   const { statusMap, numstatMap } = parseDiffRawNumstat(diffStr);
-
-  // Filter out files already identical on the main branch tip.
-  const tipDiffFiles = await filesDifferingFromMain(projectRoot, branchName, baseBranch);
-  if (tipDiffFiles) {
-    for (const p of [...numstatMap.keys()]) {
-      if (!tipDiffFiles.has(p)) numstatMap.delete(p);
-    }
-    for (const p of [...statusMap.keys()]) {
-      if (!tipDiffFiles.has(p)) statusMap.delete(p);
-    }
-  }
 
   const files: ChangedFile[] = [];
 

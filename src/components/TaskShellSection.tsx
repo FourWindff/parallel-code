@@ -260,9 +260,7 @@ export function TaskShellSection(props: TaskShellSectionProps) {
                         shellFocusFn = focusFn;
                         if (registeredKey) registerFocusFn(registeredKey, focusFn);
                       }}
-                      fontSize={Math.round(
-                        store.terminalFontSize * getFontScale(`${props.task.id}:shell`),
-                      )}
+                      fontSize={Math.round(11 * getFontScale(`${props.task.id}:shell`))}
                       autoFocus
                     />
                   </div>

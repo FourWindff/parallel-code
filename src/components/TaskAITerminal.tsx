@@ -1,11 +1,11 @@
 import { Show, For, createSignal, onMount, onCleanup } from 'solid-js';
+
 import {
   store,
   markAgentExited,
   restartAgent,
   switchAgent,
   setLastPrompt,
-  setPrefillPrompt,
   markAgentOutput,
   getFontScale,
   registerFocusFn,
@@ -86,8 +86,8 @@ export function TaskAITerminal(props: TaskAITerminalProps) {
                     : 'No prompts sent yet')
             }
             onDblClick={() => {
-              if (props.task.lastPrompt && !props.promptHandle?.getText())
-                setPrefillPrompt(props.task.id, props.task.lastPrompt);
+              if (props.task.lastPrompt && props.promptHandle && !props.promptHandle.getText())
+                props.promptHandle.setText(props.task.lastPrompt);
             }}
           >
             <span style={{ opacity: props.task.lastPrompt ? 1 : 0.4 }}>
@@ -189,6 +189,7 @@ export function TaskAITerminal(props: TaskAITerminalProps) {
                           : []),
                       ]}
                       cwd={props.task.worktreePath}
+                      stepsEnabled={props.task.stepsEnabled}
                       dockerMode={props.task.dockerMode}
                       dockerImage={props.task.dockerImage}
                       onExit={(code) => markAgentExited(a().id, code)}
@@ -198,9 +199,7 @@ export function TaskAITerminal(props: TaskAITerminalProps) {
                       onReady={(focusFn) =>
                         registerFocusFn(`${props.task.id}:ai-terminal`, focusFn)
                       }
-                      fontSize={Math.round(
-                        store.terminalFontSize * getFontScale(`${props.task.id}:ai-terminal`),
-                      )}
+                      fontSize={Math.round(13 * getFontScale(`${props.task.id}:ai-terminal`))}
                     />
                   </Show>
                 </>

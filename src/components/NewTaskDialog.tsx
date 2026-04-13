@@ -48,6 +48,7 @@ export function NewTaskDialog(props: NewTaskDialogProps) {
   const [baseBranch, setBaseBranch] = createSignal('');
   const [branches, setBranches] = createSignal<string[]>([]);
   const [branchesLoading, setBranchesLoading] = createSignal(false);
+  const [stepsEnabled, setStepsEnabled] = createSignal(store.showSteps);
   const [skipPermissions, setSkipPermissions] = createSignal(false);
   const [dockerMode, setDockerMode] = createSignal(false);
   const [dockerImageReady, setDockerImageReady] = createSignal<boolean | null>(null); // null = unknown
@@ -437,6 +438,7 @@ export function NewTaskDialog(props: NewTaskDialogProps) {
         branchPrefixOverride: gitIsolation() === 'worktree' ? prefix : undefined,
         initialPrompt: isFromDrop ? undefined : p,
         githubUrl: ghUrl,
+        stepsEnabled: stepsEnabled() || undefined,
         skipPermissions: agentSupportsSkipPermissions() && skipPermissions(),
         dockerMode: dockerMode() || undefined,
         dockerImage: dockerMode() ? store.dockerImage : undefined,
@@ -676,6 +678,28 @@ export function NewTaskDialog(props: NewTaskDialogProps) {
           >
             <For each={branches()}>{(b) => <option value={b}>{b}</option>}</For>
           </select>
+        </div>
+
+        {/* Steps tracking toggle */}
+        <div data-nav-field="steps-enabled">
+          <label
+            style={{
+              display: 'flex',
+              'align-items': 'center',
+              gap: '8px',
+              'font-size': '12px',
+              color: theme.fg,
+              cursor: 'pointer',
+            }}
+          >
+            <input
+              type="checkbox"
+              checked={stepsEnabled()}
+              onChange={(e) => setStepsEnabled(e.currentTarget.checked)}
+              style={{ 'accent-color': theme.accent, cursor: 'inherit' }}
+            />
+            Steps tracking
+          </label>
         </div>
 
         {/* Skip permissions toggle */}

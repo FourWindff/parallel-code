@@ -48,16 +48,12 @@ function flush() {
     // it encounters a transient dimension mismatch. Save the viewport
     // scroll position before fitting and restore it if clobbered.
     const buf = entry.term.buffer.active;
-    const wasAtBottom = buf.viewportY >= buf.baseY;
+    const wasScrolledUp = buf.viewportY < buf.baseY;
     const savedViewportY = buf.viewportY;
 
     entry.fitAddon.fit();
 
-    if (wasAtBottom) {
-      // User was following output — ensure we stay pinned to the bottom
-      // even if fit() changed baseY (e.g. fewer rows → more scrollback).
-      entry.term.scrollToBottom();
-    } else if (buf.viewportY !== savedViewportY) {
+    if (wasScrolledUp && buf.viewportY !== savedViewportY) {
       entry.term.scrollToLine(Math.min(savedViewportY, buf.baseY));
     }
 

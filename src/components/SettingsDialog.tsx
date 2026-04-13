@@ -11,7 +11,6 @@ import { theme, sectionLabelStyle } from '../lib/theme';
 import {
   store,
   setTerminalFont,
-  setTerminalFontSize,
   setThemePreset,
   setAutoTrustFolders,
   setShowPlans,
@@ -464,73 +463,6 @@ export function SettingsDialog(props: SettingsDialogProps) {
           Custom Agents
         </div>
         <CustomAgentEditor />
-      </div>
-
-      <div style={{ display: 'flex', 'flex-direction': 'column', gap: '10px' }}>
-        <div
-          style={{
-            ...sectionLabelStyle,
-            'font-weight': '600',
-          }}
-        >
-          Terminal Font Size
-        </div>
-        <div
-          style={{
-            display: 'flex',
-            'flex-direction': 'column',
-            gap: '8px',
-            padding: '8px 12px',
-            'border-radius': '8px',
-            background: theme.bgInput,
-            border: `1px solid ${theme.border}`,
-          }}
-        >
-          <div
-            style={{
-              display: 'flex',
-              'align-items': 'center',
-              'justify-content': 'space-between',
-            }}
-          >
-            <span style={{ 'font-size': '13px', color: theme.fg }}>Default font size</span>
-            <span
-              style={{
-                'font-size': '12px',
-                color: theme.fgMuted,
-                'font-family': "'JetBrains Mono', monospace",
-                'min-width': '36px',
-                'text-align': 'right',
-              }}
-            >
-              {store.terminalFontSize}px
-            </span>
-          </div>
-          <input
-            type="range"
-            min="10"
-            max="20"
-            step="1"
-            value={store.terminalFontSize}
-            onInput={(e) => setTerminalFontSize(Number(e.currentTarget.value))}
-            style={{
-              width: '100%',
-              'accent-color': theme.accent,
-              cursor: 'pointer',
-            }}
-          />
-          <div
-            style={{
-              display: 'flex',
-              'justify-content': 'space-between',
-              'font-size': '10px',
-              color: theme.fgSubtle,
-            }}
-          >
-            <span>Smaller</span>
-            <span>Larger</span>
-          </div>
-        </div>
       </div>
 
       <div style={{ display: 'flex', 'flex-direction': 'column', gap: '10px' }}>

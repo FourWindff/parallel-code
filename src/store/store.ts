@@ -117,6 +117,7 @@ export {
   onAgentReady,
   offAgentReady,
   normalizeForComparison,
+  normalizeCurrentFrame,
   looksLikeQuestion,
   isTrustQuestionAutoHandled,
   isAutoTrustSettling,

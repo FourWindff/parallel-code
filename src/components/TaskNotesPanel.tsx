@@ -290,10 +290,9 @@ export function TaskNotesPanel(props: TaskNotesPanelProps) {
                         color: theme.fgMuted,
                         'border-bottom': `1px solid ${theme.border}`,
                         'flex-shrink': '0',
-                        'max-height': '2.8em',
-                        'line-height': '1.4',
+                        'white-space': 'nowrap',
                         overflow: 'hidden',
-                        'word-break': 'break-word',
+                        'text-overflow': 'ellipsis',
                       }}
                     >
                       <span style={{ color: theme.accent, 'font-weight': '600' }}>

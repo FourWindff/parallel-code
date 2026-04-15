@@ -136,7 +136,9 @@ export function ChangedFilesList(props: ChangedFilesListProps) {
     const branchName = props.branchName;
     const baseBranch = props.baseBranch;
     const commitHash = props.selectedCommit;
-    if (!props.isActive) return;
+    // In single-commit mode the user explicitly navigated — always fetch.
+    // In all-changes mode skip when inactive to avoid background polling.
+    if (!commitHash && !props.isActive) return;
     let cancelled = false;
     let inFlight = false;
     let usingBranchFallback = false;

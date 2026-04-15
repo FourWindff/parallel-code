@@ -249,6 +249,24 @@ function DiffViewerContent(props: DiffViewerDialogProps) {
           'flex-shrink': '0',
         }}
       >
+        <Show when={props.worktreePath && props.gitIsolation === 'worktree'}>
+          <CommitNavBar
+            commits={props.commitList ?? []}
+            selectedCommitHash={props.selectedCommit ?? null}
+            onNavigate={(hash) => props.onCommitNavigate?.(hash)}
+            showMessage={true}
+          />
+          <span
+            style={{
+              width: '1px',
+              height: '16px',
+              background: theme.border,
+              'flex-shrink': '0',
+              margin: '0 4px',
+            }}
+          />
+        </Show>
+
         <span
           style={{
             'font-size': sf(14),
@@ -276,24 +294,6 @@ function DiffViewerContent(props: DiffViewerDialogProps) {
         >
           -{totalRemoved()}
         </span>
-
-        <Show when={props.worktreePath && props.gitIsolation === 'worktree'}>
-          <span
-            style={{
-              width: '1px',
-              height: '16px',
-              background: theme.border,
-              'flex-shrink': '0',
-              margin: '0 4px',
-            }}
-          />
-          <CommitNavBar
-            commits={props.commitList ?? []}
-            selectedCommitHash={props.selectedCommit ?? null}
-            onNavigate={(hash) => props.onCommitNavigate?.(hash)}
-            showMessage={true}
-          />
-        </Show>
 
         <ReviewCommentsButton />
 

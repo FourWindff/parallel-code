@@ -18,7 +18,6 @@ export const [store, setStore] = createStore<AppStore>({
   customAgents: [],
   showNewTaskDialog: false,
   sidebarVisible: true,
-  fontScales: {},
   panelSizes: {},
   globalScale: 1,
   taskGitStatus: {},
@@ -64,15 +63,12 @@ export const [store, setStore] = createStore<AppStore>({
   showArena: false,
 });
 
-/** Remove fontScales, panelSizes, focusedPanel, and taskOrder entries for a given ID.
+/** Remove panelSizes, focusedPanel, and taskOrder entries for a given ID.
  *  Call inside a `produce` callback. Returns the index the item had in taskOrder. */
 export function cleanupPanelEntries(s: AppStore, id: string): number {
   const idx = s.taskOrder.indexOf(id);
   delete s.focusedPanel[id];
   const prefix = id + ':';
-  for (const key of Object.keys(s.fontScales)) {
-    if (key === id || key.startsWith(prefix)) delete s.fontScales[key];
-  }
   for (const key of Object.keys(s.panelSizes)) {
     if (key === id || key.startsWith(prefix)) delete s.panelSizes[key];
   }

@@ -14,7 +14,6 @@ function persistedSnapshot(): string {
     collapsedTaskOrder: store.collapsedTaskOrder,
     activeTaskId: store.activeTaskId,
     sidebarVisible: store.sidebarVisible,
-    fontScales: store.fontScales,
     panelSizes: store.panelSizes,
     globalScale: store.globalScale,
     completedTaskDate: store.completedTaskDate,

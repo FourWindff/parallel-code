@@ -15,7 +15,6 @@ import { useFocusRegistration } from '../lib/focus-registration';
 import { ResizablePanel, type PanelChild } from './ResizablePanel';
 import type { EditableTextHandle } from './EditableText';
 import { PromptInput, type PromptInputHandle } from './PromptInput';
-import { ScalablePanel } from './ScalablePanel';
 import { CloseTaskDialog } from './CloseTaskDialog';
 import { MergeDialog } from './MergeDialog';
 import { PushDialog } from './PushDialog';
@@ -259,25 +258,23 @@ export function TaskPanel(props: TaskPanelProps) {
       minSize: 54,
       maxSize: 300,
       content: () => (
-        <ScalablePanel panelId={`${props.task.id}:prompt`}>
-          <div
-            onClick={() => setTaskFocusedPanel(props.task.id, 'prompt')}
-            style={{ height: '100%' }}
-          >
-            <PromptInput
-              taskId={props.task.id}
-              agentId={firstAgentId()}
-              initialPrompt={props.task.initialPrompt}
-              prefillPrompt={props.task.prefillPrompt}
-              onSend={() => {
-                if (props.task.initialPrompt) clearInitialPrompt(props.task.id);
-              }}
-              onPrefillConsumed={() => clearPrefillPrompt(props.task.id)}
-              ref={(el) => (promptRef = el)}
-              handle={(h) => (promptHandle = h)}
-            />
-          </div>
-        </ScalablePanel>
+        <div
+          onClick={() => setTaskFocusedPanel(props.task.id, 'prompt')}
+          style={{ height: '100%' }}
+        >
+          <PromptInput
+            taskId={props.task.id}
+            agentId={firstAgentId()}
+            initialPrompt={props.task.initialPrompt}
+            prefillPrompt={props.task.prefillPrompt}
+            onSend={() => {
+              if (props.task.initialPrompt) clearInitialPrompt(props.task.id);
+            }}
+            onPrefillConsumed={() => clearPrefillPrompt(props.task.id)}
+            ref={(el) => (promptRef = el)}
+            handle={(h) => (promptHandle = h)}
+          />
+        </div>
       ),
     };
   }

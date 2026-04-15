@@ -26,7 +26,10 @@ function readStepsFile(stepsFile: string): unknown[] | null {
     const parsed: unknown = JSON.parse(raw);
     if (!Array.isArray(parsed)) return null;
     return parsed as unknown[];
-  } catch {
+  } catch (e) {
+    if ((e as NodeJS.ErrnoException).code !== 'ENOENT') {
+      console.error('[steps] Failed to read steps file:', e);
+    }
     return null;
   }
 }

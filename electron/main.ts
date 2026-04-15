@@ -97,7 +97,9 @@ function createWindow() {
   // Open links in external browser instead of inside Electron
   mainWindow.webContents.setWindowOpenHandler(({ url }) => {
     if (url.startsWith('http:') || url.startsWith('https:')) {
-      shell.openExternal(url).catch(() => {});
+      shell
+        .openExternal(url)
+        .catch((e: unknown) => console.warn('[main] Failed to open external URL:', e));
     }
     return { action: 'deny' };
   });
@@ -115,7 +117,9 @@ function createWindow() {
     if (url.startsWith('file://')) return;
     event.preventDefault();
     if (url.startsWith('http:') || url.startsWith('https:')) {
-      shell.openExternal(url).catch(() => {});
+      shell
+        .openExternal(url)
+        .catch((e: unknown) => console.warn('[main] Failed to open external URL:', e));
     }
   });
 

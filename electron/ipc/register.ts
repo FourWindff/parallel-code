@@ -531,7 +531,8 @@ export function registerAllHandlers(win: BrowserWindow): void {
       const buf = img.toPNG();
       await fs.promises.writeFile(clipboardImagePath, buf);
       return clipboardImagePath;
-    } catch {
+    } catch (e) {
+      console.error('[clipboard] Failed to save clipboard image:', e);
       return null;
     }
   });

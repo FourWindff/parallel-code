@@ -438,7 +438,7 @@ export function NewTaskDialog(props: NewTaskDialogProps) {
         branchPrefixOverride: gitIsolation() === 'worktree' ? prefix : undefined,
         initialPrompt: isFromDrop ? undefined : p,
         githubUrl: ghUrl,
-        stepsEnabled: stepsEnabled() || undefined,
+        stepsEnabled: stepsEnabled(),
         skipPermissions: agentSupportsSkipPermissions() && skipPermissions(),
         dockerMode: dockerMode() || undefined,
         dockerImage: dockerMode() ? store.dockerImage : undefined,

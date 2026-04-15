@@ -22,7 +22,6 @@ import {
   toggleSidebar,
   toggleArena,
   moveActiveTask,
-  getGlobalScale,
   adjustGlobalScale,
   resetGlobalScale,
   resetFontScale,
@@ -239,6 +238,15 @@ function App() {
   // Toggle font smoothing CSS class on body
   createEffect(() => {
     document.body.classList.toggle('font-smoothing', store.fontSmoothing);
+  });
+
+  // Apply zoom via Electron's webFrame so window.devicePixelRatio scales with it.
+  // CSS transform: scale() does not affect devicePixelRatio, so canvas-based renderers
+  // (xterm.js WebGL) would render at insufficient pixel density and look blurry.
+  // webFrame.setZoomFactor() raises devicePixelRatio proportionally, triggering
+  // xterm's ScreenDprMonitor to re-render at the correct resolution.
+  createEffect(() => {
+    window.electron.setZoomFactor(store.globalScale);
   });
 
   onMount(async () => {
@@ -717,10 +725,8 @@ function App() {
         onDrop={handleDrop}
         style={{
           '--inactive-column-opacity': store.inactiveColumnOpacity,
-          width: `${100 / getGlobalScale()}vw`,
-          height: `${100 / getGlobalScale()}vh`,
-          transform: `scale(${getGlobalScale()})`,
-          'transform-origin': '0 0',
+          width: '100vw',
+          height: '100vh',
           display: 'flex',
           'flex-direction': 'column',
           position: 'relative',

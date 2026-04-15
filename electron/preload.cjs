@@ -1,4 +1,4 @@
-const { contextBridge, ipcRenderer } = require('electron');
+const { contextBridge, ipcRenderer, webFrame } = require('electron');
 
 // Allowlist of valid IPC channels.
 // IMPORTANT: This list MUST stay in sync with the IPC enum in electron/ipc/channels.ts.
@@ -128,4 +128,5 @@ contextBridge.exposeInMainWorld('electron', {
       ipcRenderer.removeAllListeners(channel);
     },
   },
+  setZoomFactor: (factor) => webFrame.setZoomFactor(factor),
 });

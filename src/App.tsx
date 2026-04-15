@@ -595,10 +595,46 @@ function App() {
         }
       },
     });
+    // Zoom in: three variants because keyboard layouts differ.
+    // matches() requires an exact shift-state match (!!e.shiftKey === !!s.shift),
+    // so we need separate registrations for each case:
+    //   key '=' no shift  — Ctrl+= on US/UK keyboards
+    //   key '+' shift     — Ctrl+Shift+= on US/UK keyboards (e.key is '+' when Shift held)
+    //   key '+' no shift  — Ctrl++ on European keyboards (dedicated + key) and NumPad+
+    registerShortcut({
+      key: '=',
+      cmdOrCtrl: true,
+      global: true,
+      dialogSafe: true,
+      handler: () => adjustGlobalScale(1),
+    });
+    registerShortcut({
+      key: '+',
+      cmdOrCtrl: true,
+      shift: true,
+      global: true,
+      dialogSafe: true,
+      handler: () => adjustGlobalScale(1),
+    });
+    registerShortcut({
+      key: '+',
+      cmdOrCtrl: true,
+      global: true,
+      dialogSafe: true,
+      handler: () => adjustGlobalScale(1),
+    });
+    registerShortcut({
+      key: '-',
+      cmdOrCtrl: true,
+      global: true,
+      dialogSafe: true,
+      handler: () => adjustGlobalScale(-1),
+    });
     registerShortcut({
       key: '0',
       cmdOrCtrl: true,
       global: true,
+      dialogSafe: true,
       handler: () => {
         const taskId = store.activeTaskId;
         if (taskId) resetFontScale(taskId);

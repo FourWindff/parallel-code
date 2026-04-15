@@ -39,7 +39,6 @@ export async function saveState(): Promise<void> {
     tasks: {},
     activeTaskId: store.activeTaskId,
     sidebarVisible: store.sidebarVisible,
-    fontScales: { ...store.fontScales },
     panelSizes: { ...store.panelSizes },
     globalScale: store.globalScale,
     completedTaskDate: store.completedTaskDate,
@@ -183,7 +182,6 @@ interface LegacyPersistedState {
   activeTaskId: string | null;
   sidebarVisible: boolean;
   // Fields that may be present in newer state files (validated at runtime)
-  fontScales?: unknown;
   panelSizes?: unknown;
   globalScale?: unknown;
   completedTaskDate?: unknown;
@@ -273,7 +271,6 @@ export async function loadState(): Promise<void> {
       s.taskOrder = raw.taskOrder;
       s.activeTaskId = raw.activeTaskId;
       s.sidebarVisible = raw.sidebarVisible;
-      s.fontScales = isStringNumberRecord(raw.fontScales) ? raw.fontScales : {};
       s.panelSizes = isStringNumberRecord(raw.panelSizes) ? raw.panelSizes : {};
       s.globalScale = typeof raw.globalScale === 'number' ? raw.globalScale : 1;
       const completedTaskDate =

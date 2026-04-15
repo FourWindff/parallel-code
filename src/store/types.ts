@@ -114,7 +114,6 @@ export interface PersistedState {
   terminals?: Record<string, PersistedTerminal>;
   activeTaskId: string | null;
   sidebarVisible: boolean;
-  fontScales?: Record<string, number>;
   panelSizes?: Record<string, number>;
   globalScale?: number;
   completedTaskDate?: string;
@@ -170,7 +169,6 @@ export interface AppStore {
   customAgents: AgentDef[];
   showNewTaskDialog: boolean;
   sidebarVisible: boolean;
-  fontScales: Record<string, number>;
   panelSizes: Record<string, number>;
   globalScale: number;
   taskGitStatus: Record<string, WorktreeStatus>;

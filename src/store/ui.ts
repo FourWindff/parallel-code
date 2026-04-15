@@ -1,39 +1,10 @@
-import { produce } from 'solid-js/store';
 import { store, setStore } from './core';
 import type { LookPreset } from '../lib/look';
 import type { PersistedWindowState } from './types';
 
-// --- Font Scale (per-panel) ---
-
 const MIN_SCALE = 0.5;
 const MAX_SCALE = 2.0;
 const SCALE_STEP = 0.1;
-
-export function getFontScale(panelId: string): number {
-  return store.fontScales[panelId] ?? 1;
-}
-
-export function adjustFontScale(panelId: string, delta: 1 | -1): void {
-  const current = getFontScale(panelId);
-  const next =
-    Math.round(Math.min(MAX_SCALE, Math.max(MIN_SCALE, current + delta * SCALE_STEP)) * 10) / 10;
-  setStore('fontScales', panelId, next);
-}
-
-export function resetFontScale(panelId: string): void {
-  if (panelId.includes(':')) {
-    setStore('fontScales', panelId, 1.0);
-  } else {
-    setStore(
-      produce((s) => {
-        const prefix = panelId + ':';
-        for (const key of Object.keys(s.fontScales)) {
-          if (key === panelId || key.startsWith(prefix)) s.fontScales[key] = 1.0;
-        }
-      }),
-    );
-  }
-}
 
 // --- Global Scale ---
 

@@ -25,7 +25,6 @@ import {
   getGlobalScale,
   adjustGlobalScale,
   resetGlobalScale,
-  resetFontScale,
   startTaskStatusPolling,
   stopTaskStatusPolling,
   navigateRow,
@@ -600,8 +599,6 @@ function App() {
       cmdOrCtrl: true,
       global: true,
       handler: () => {
-        const taskId = store.activeTaskId;
-        if (taskId) resetFontScale(taskId);
         resetGlobalScale();
       },
     });

@@ -85,9 +85,6 @@ export {
 export type { PanelId, PendingAction } from './types';
 export { saveState, loadState } from './persistence';
 export {
-  getFontScale,
-  adjustFontScale,
-  resetFontScale,
   getGlobalScale,
   adjustGlobalScale,
   resetGlobalScale,

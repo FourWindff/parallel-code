@@ -2,7 +2,6 @@ import { Show, For, createSignal, createMemo, createEffect, onMount } from 'soli
 import { theme } from '../lib/theme';
 import { sf } from '../lib/fontScale';
 import { badgeStyle } from '../lib/badgeStyle';
-import { ScalablePanel } from './ScalablePanel';
 import { useFocusRegistration } from '../lib/focus-registration';
 import { setTaskFocusedPanel } from '../store/store';
 import type { Task } from '../store/types';
@@ -161,309 +160,307 @@ export function TaskStepsSection(props: TaskStepsSectionProps) {
   }
 
   return (
-    <ScalablePanel panelId={`${props.task.id}:steps`}>
-      <div
-        class="focusable-panel"
-        style={{
-          height: '100%',
-          display: 'flex',
-          'flex-direction': 'column',
-          background: theme.taskPanelBg,
-          'border-radius': '6px',
-        }}
-      >
-        {/* Waiting placeholder — shown when steps tracking is on but no steps written yet */}
-        <Show when={steps().length === 0}>
-          <div
+    <div
+      class="focusable-panel"
+      style={{
+        height: '100%',
+        display: 'flex',
+        'flex-direction': 'column',
+        background: theme.taskPanelBg,
+        'border-radius': '6px',
+      }}
+    >
+      {/* Waiting placeholder — shown when steps tracking is on but no steps written yet */}
+      <Show when={steps().length === 0}>
+        <div
+          style={{
+            height: '28px',
+            display: 'flex',
+            'align-items': 'center',
+            padding: '0 8px',
+            gap: '6px',
+          }}
+        >
+          <span
             style={{
-              height: '28px',
-              display: 'flex',
-              'align-items': 'center',
-              padding: '0 8px',
-              gap: '6px',
+              'font-size': sf(11),
+              'font-weight': '600',
+              color: theme.fgMuted,
+              'text-transform': 'uppercase',
+              'letter-spacing': '0.05em',
             }}
           >
-            <span
-              style={{
-                'font-size': sf(11),
-                'font-weight': '600',
-                color: theme.fgMuted,
-                'text-transform': 'uppercase',
-                'letter-spacing': '0.05em',
-              }}
-            >
-              Steps
-            </span>
-            <Show
-              when={isInteracting()}
-              fallback={
-                <span style={{ 'font-size': sf(11), color: theme.fgSubtle }}>waiting...</span>
-              }
-            >
-              <WaitingIndicator fontSize={sf(11)} />
-            </Show>
-          </div>
-        </Show>
-
-        {/* Scrollable content — keyboard-navigable when focused */}
-        <Show when={steps().length > 0}>
-          <div
-            ref={scrollRef}
-            tabIndex={0}
-            onClick={() => setTaskFocusedPanel(props.task.id, 'steps')}
-            onKeyDown={(e) => {
-              if (e.altKey) return;
-              const SCROLL_STEP_PX = 60;
-              if (e.key === 'ArrowDown') {
-                e.preventDefault();
-                scrollRef.scrollBy({ top: SCROLL_STEP_PX, behavior: 'smooth' });
-              } else if (e.key === 'ArrowUp') {
-                e.preventDefault();
-                scrollRef.scrollBy({ top: -SCROLL_STEP_PX, behavior: 'smooth' });
-              } else if (e.key === 'PageDown') {
-                e.preventDefault();
-                scrollRef.scrollBy({ top: scrollRef.clientHeight, behavior: 'smooth' });
-              } else if (e.key === 'PageUp') {
-                e.preventDefault();
-                scrollRef.scrollBy({ top: -scrollRef.clientHeight, behavior: 'smooth' });
-              }
-            }}
-            style={{
-              flex: '1',
-              overflow: 'auto',
-              padding: '0 8px 8px',
-              display: 'flex',
-              'flex-direction': 'column',
-              gap: '6px',
-              outline: 'none',
-            }}
+            Steps
+          </span>
+          <Show
+            when={isInteracting()}
+            fallback={
+              <span style={{ 'font-size': sf(11), color: theme.fgSubtle }}>waiting...</span>
+            }
           >
-            {/* History — collapsible entries */}
-            <Show when={historySteps().length > 0}>
-              <div style={{ display: 'flex', 'flex-direction': 'column', gap: '2px' }}>
-                <For each={historySteps()}>
-                  {(step, idx) => {
-                    const isExpanded = () => expandedHistory().has(idx());
+            <WaitingIndicator fontSize={sf(11)} />
+          </Show>
+        </div>
+      </Show>
 
-                    return (
-                      <div>
-                        <div
-                          onClick={() => toggleHistory(idx())}
+      {/* Scrollable content — keyboard-navigable when focused */}
+      <Show when={steps().length > 0}>
+        <div
+          ref={scrollRef}
+          tabIndex={0}
+          onClick={() => setTaskFocusedPanel(props.task.id, 'steps')}
+          onKeyDown={(e) => {
+            if (e.altKey) return;
+            const SCROLL_STEP_PX = 60;
+            if (e.key === 'ArrowDown') {
+              e.preventDefault();
+              scrollRef.scrollBy({ top: SCROLL_STEP_PX, behavior: 'smooth' });
+            } else if (e.key === 'ArrowUp') {
+              e.preventDefault();
+              scrollRef.scrollBy({ top: -SCROLL_STEP_PX, behavior: 'smooth' });
+            } else if (e.key === 'PageDown') {
+              e.preventDefault();
+              scrollRef.scrollBy({ top: scrollRef.clientHeight, behavior: 'smooth' });
+            } else if (e.key === 'PageUp') {
+              e.preventDefault();
+              scrollRef.scrollBy({ top: -scrollRef.clientHeight, behavior: 'smooth' });
+            }
+          }}
+          style={{
+            flex: '1',
+            overflow: 'auto',
+            padding: '0 8px 8px',
+            display: 'flex',
+            'flex-direction': 'column',
+            gap: '6px',
+            outline: 'none',
+          }}
+        >
+          {/* History — collapsible entries */}
+          <Show when={historySteps().length > 0}>
+            <div style={{ display: 'flex', 'flex-direction': 'column', gap: '2px' }}>
+              <For each={historySteps()}>
+                {(step, idx) => {
+                  const isExpanded = () => expandedHistory().has(idx());
+
+                  return (
+                    <div>
+                      <div
+                        onClick={() => toggleHistory(idx())}
+                        style={{
+                          display: 'flex',
+                          'align-items': 'center',
+                          gap: '6px',
+                          padding: '3px 6px 3px 0',
+                          cursor: 'pointer',
+                          'border-radius': '4px',
+                          'user-select': 'none',
+                        }}
+                        onMouseEnter={(e) => {
+                          e.currentTarget.style.background = `color-mix(in srgb, ${theme.fgMuted} 8%, transparent)`;
+                        }}
+                        onMouseLeave={(e) => {
+                          e.currentTarget.style.background = 'transparent';
+                        }}
+                      >
+                        <span
                           style={{
-                            display: 'flex',
-                            'align-items': 'center',
-                            gap: '6px',
-                            padding: '3px 6px 3px 0',
-                            cursor: 'pointer',
-                            'border-radius': '4px',
-                            'user-select': 'none',
-                          }}
-                          onMouseEnter={(e) => {
-                            e.currentTarget.style.background = `color-mix(in srgb, ${theme.fgMuted} 8%, transparent)`;
-                          }}
-                          onMouseLeave={(e) => {
-                            e.currentTarget.style.background = 'transparent';
+                            'font-size': sf(10),
+                            color: theme.fgSubtle,
+                            'flex-shrink': '0',
+                            width: '20px',
+                            'text-align': 'right',
                           }}
                         >
+                          {idx() + 1}
+                        </span>
+                        <span
+                          style={{
+                            ...badgeStyle(statusColor(String(step.status ?? ''))),
+                            'font-size': sf(10),
+                            padding: '1px 5px',
+                          }}
+                        >
+                          {String(step.status ?? '').replaceAll('_', ' ')}
+                        </span>
+                        <span
+                          style={{
+                            'font-size': sf(12),
+                            'font-weight': '600',
+                            color: theme.fg,
+                            overflow: 'hidden',
+                            'text-overflow': 'ellipsis',
+                            'white-space': 'nowrap',
+                            flex: '1',
+                          }}
+                        >
+                          {truncate(step.summary ?? '', 60)}
+                        </span>
+                        <Show when={step.timestamp}>
                           <span
                             style={{
-                              'font-size': sf(10),
+                              'font-size': sf(9),
                               color: theme.fgSubtle,
                               'flex-shrink': '0',
-                              width: '20px',
-                              'text-align': 'right',
                             }}
                           >
-                            {idx() + 1}
+                            {stepDuration(
+                              step.timestamp,
+                              steps()[idx() + 1]?.timestamp ?? new Date().toISOString(),
+                            )}
                           </span>
+                        </Show>
+                        <Show when={(step.files_touched?.length ?? 0) > 0}>
                           <span
                             style={{
-                              ...badgeStyle(statusColor(String(step.status ?? ''))),
-                              'font-size': sf(10),
-                              padding: '1px 5px',
+                              'font-size': sf(9),
+                              color: theme.fgSubtle,
+                              'flex-shrink': '0',
                             }}
                           >
-                            {String(step.status ?? '').replaceAll('_', ' ')}
+                            {step.files_touched?.length ?? 0}{' '}
+                            {(step.files_touched?.length ?? 0) === 1 ? 'file' : 'files'}
                           </span>
-                          <span
-                            style={{
-                              'font-size': sf(12),
-                              'font-weight': '600',
-                              color: theme.fg,
-                              overflow: 'hidden',
-                              'text-overflow': 'ellipsis',
-                              'white-space': 'nowrap',
-                              flex: '1',
-                            }}
-                          >
-                            {truncate(step.summary ?? '', 60)}
-                          </span>
-                          <Show when={step.timestamp}>
-                            <span
-                              style={{
-                                'font-size': sf(9),
-                                color: theme.fgSubtle,
-                                'flex-shrink': '0',
-                              }}
-                            >
-                              {stepDuration(
-                                step.timestamp,
-                                steps()[idx() + 1]?.timestamp ?? new Date().toISOString(),
-                              )}
-                            </span>
-                          </Show>
-                          <Show when={(step.files_touched?.length ?? 0) > 0}>
-                            <span
-                              style={{
-                                'font-size': sf(9),
-                                color: theme.fgSubtle,
-                                'flex-shrink': '0',
-                              }}
-                            >
-                              {step.files_touched?.length ?? 0}{' '}
-                              {(step.files_touched?.length ?? 0) === 1 ? 'file' : 'files'}
-                            </span>
-                          </Show>
-                        </div>
-
-                        <Show when={isExpanded()}>
-                          <div
-                            style={{
-                              'margin-left': '32px',
-                              padding: '4px 8px',
-                              'font-size': sf(12),
-                              color: theme.fgMuted,
-                              'border-left': `2px solid ${theme.border}`,
-                            }}
-                          >
-                            <Show when={step.timestamp}>
-                              <div
-                                style={{
-                                  'font-size': sf(9),
-                                  color: theme.fgSubtle,
-                                  'margin-bottom': '4px',
-                                }}
-                              >
-                                {relativeTime(step.timestamp)}
-                              </div>
-                            </Show>
-                            <Show when={step.detail}>
-                              <div style={{ 'margin-bottom': '4px' }}>
-                                {truncate(step.detail ?? '', 280)}
-                              </div>
-                            </Show>
-                            <Show
-                              when={
-                                Array.isArray(step.files_touched) && step.files_touched.length > 0
-                              }
-                            >
-                              <div
-                                style={{
-                                  display: 'flex',
-                                  'flex-wrap': 'wrap',
-                                  gap: '3px',
-                                }}
-                              >
-                                <For each={step.files_touched}>
-                                  {(file) => (
-                                    <FileBadge file={file} onFileClick={props.onFileClick} />
-                                  )}
-                                </For>
-                              </div>
-                            </Show>
-                          </div>
                         </Show>
                       </div>
-                    );
-                  }}
-                </For>
-              </div>
-            </Show>
 
-            {/* Latest step — always expanded, anchored at bottom */}
-            <Show when={latestStep()}>
-              {(step) => (
+                      <Show when={isExpanded()}>
+                        <div
+                          style={{
+                            'margin-left': '32px',
+                            padding: '4px 8px',
+                            'font-size': sf(12),
+                            color: theme.fgMuted,
+                            'border-left': `2px solid ${theme.border}`,
+                          }}
+                        >
+                          <Show when={step.timestamp}>
+                            <div
+                              style={{
+                                'font-size': sf(9),
+                                color: theme.fgSubtle,
+                                'margin-bottom': '4px',
+                              }}
+                            >
+                              {relativeTime(step.timestamp)}
+                            </div>
+                          </Show>
+                          <Show when={step.detail}>
+                            <div style={{ 'margin-bottom': '4px' }}>
+                              {truncate(step.detail ?? '', 280)}
+                            </div>
+                          </Show>
+                          <Show
+                            when={
+                              Array.isArray(step.files_touched) && step.files_touched.length > 0
+                            }
+                          >
+                            <div
+                              style={{
+                                display: 'flex',
+                                'flex-wrap': 'wrap',
+                                gap: '3px',
+                              }}
+                            >
+                              <For each={step.files_touched}>
+                                {(file) => (
+                                  <FileBadge file={file} onFileClick={props.onFileClick} />
+                                )}
+                              </For>
+                            </div>
+                          </Show>
+                        </div>
+                      </Show>
+                    </div>
+                  );
+                }}
+              </For>
+            </div>
+          </Show>
+
+          {/* Latest step — always expanded, anchored at bottom */}
+          <Show when={latestStep()}>
+            {(step) => (
+              <div
+                style={{
+                  'border-radius': '6px',
+                  padding: '8px 10px',
+                }}
+              >
                 <div
                   style={{
-                    'border-radius': '6px',
-                    padding: '8px 10px',
+                    display: 'flex',
+                    'align-items': 'center',
+                    gap: '8px',
+                    'margin-bottom': '4px',
                   }}
                 >
+                  <span style={badgeStyle(statusColor(String(step().status ?? '')))}>
+                    {String(step().status ?? '').replaceAll('_', ' ')}
+                  </span>
+                  <span
+                    style={{
+                      'font-size': sf(12),
+                      'font-weight': '600',
+                      color: theme.fg,
+                      flex: '1',
+                    }}
+                  >
+                    {truncate(step().summary ?? '', 140)}
+                  </span>
+                  <Show when={step().timestamp}>
+                    <span
+                      style={{ 'font-size': sf(10), color: theme.fgSubtle, 'flex-shrink': '0' }}
+                    >
+                      {relativeTime(step().timestamp)}
+                    </span>
+                  </Show>
+                </div>
+                <Show when={step().detail}>
+                  <div
+                    style={{
+                      'font-size': sf(12),
+                      color: theme.fgMuted,
+                      'margin-top': '4px',
+                      'line-height': '1.4',
+                    }}
+                  >
+                    {truncate(step().detail ?? '', 280)}
+                  </div>
+                </Show>
+                <Show when={(step().files_touched ?? []).length > 0}>
                   <div
                     style={{
                       display: 'flex',
-                      'align-items': 'center',
-                      gap: '8px',
-                      'margin-bottom': '4px',
+                      'flex-wrap': 'wrap',
+                      gap: '4px',
+                      'margin-top': '6px',
                     }}
                   >
-                    <span style={badgeStyle(statusColor(String(step().status ?? '')))}>
-                      {String(step().status ?? '').replaceAll('_', ' ')}
-                    </span>
-                    <span
-                      style={{
-                        'font-size': sf(12),
-                        'font-weight': '600',
-                        color: theme.fg,
-                        flex: '1',
-                      }}
-                    >
-                      {truncate(step().summary ?? '', 140)}
-                    </span>
-                    <Show when={step().timestamp}>
-                      <span
-                        style={{ 'font-size': sf(10), color: theme.fgSubtle, 'flex-shrink': '0' }}
-                      >
-                        {relativeTime(step().timestamp)}
-                      </span>
-                    </Show>
+                    <For each={step().files_touched}>
+                      {(file) => <FileBadge file={file} onFileClick={props.onFileClick} />}
+                    </For>
                   </div>
-                  <Show when={step().detail}>
-                    <div
-                      style={{
-                        'font-size': sf(12),
-                        color: theme.fgMuted,
-                        'margin-top': '4px',
-                        'line-height': '1.4',
-                      }}
-                    >
-                      {truncate(step().detail ?? '', 280)}
-                    </div>
-                  </Show>
-                  <Show when={(step().files_touched ?? []).length > 0}>
-                    <div
-                      style={{
-                        display: 'flex',
-                        'flex-wrap': 'wrap',
-                        gap: '4px',
-                        'margin-top': '6px',
-                      }}
-                    >
-                      <For each={step().files_touched}>
-                        {(file) => <FileBadge file={file} onFileClick={props.onFileClick} />}
-                      </For>
-                    </div>
-                  </Show>
-                </div>
-              )}
-            </Show>
-
-            {/* Interacting indicator — shown when user sent input after last step */}
-            <Show when={isInteracting()}>
-              <div
-                style={{
-                  display: 'flex',
-                  'align-items': 'center',
-                  gap: '5px',
-                  padding: '4px 2px 2px',
-                }}
-              >
-                <WaitingIndicator fontSize={sf(10)} />
+                </Show>
               </div>
-            </Show>
-          </div>
-        </Show>
-      </div>
-    </ScalablePanel>
+            )}
+          </Show>
+
+          {/* Interacting indicator — shown when user sent input after last step */}
+          <Show when={isInteracting()}>
+            <div
+              style={{
+                display: 'flex',
+                'align-items': 'center',
+                gap: '5px',
+                padding: '4px 2px 2px',
+              }}
+            >
+              <WaitingIndicator fontSize={sf(10)} />
+            </div>
+          </Show>
+        </div>
+      </Show>
+    </div>
   );
 }

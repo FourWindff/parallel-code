@@ -425,7 +425,7 @@ export function TaskStepsSection(props: TaskStepsSectionProps) {
                       'line-height': '1.4',
                     }}
                   >
-                    → {truncate(step().next ?? '', 160)}
+                    → `{truncate(step().next ?? '', 160)}`
                   </div>
                 </Show>
                 <Show when={step().detail}>

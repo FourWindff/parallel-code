@@ -16,7 +16,32 @@ const watchers = new Map<string, StepsWatcher>();
 function sendStepsContent(win: BrowserWindow, taskId: string, stepsFile: string): void {
   if (win.isDestroyed()) return;
   const steps = readStepsFile(stepsFile);
+  if (steps) stampMissingTimestamps(steps, stepsFile);
   win.webContents.send(IPC.StepsContent, { taskId, steps });
+}
+
+/**
+ * Stamps any entries lacking a `timestamp` field with the current time and
+ * writes the file back so the timestamps persist. The subsequent file-change
+ * event will re-read and find all entries already stamped — no infinite loop.
+ */
+function stampMissingTimestamps(steps: unknown[], stepsFile: string): void {
+  let dirty = false;
+  for (const entry of steps) {
+    if (entry !== null && typeof entry === 'object' && !Array.isArray(entry)) {
+      const e = entry as Record<string, unknown>;
+      if (!e['timestamp']) {
+        e['timestamp'] = new Date().toISOString();
+        dirty = true;
+      }
+    }
+  }
+  if (!dirty) return;
+  try {
+    fs.writeFileSync(stepsFile, JSON.stringify(steps, null, 2), 'utf-8');
+  } catch (err) {
+    console.warn('[steps] Failed to write back timestamps:', err);
+  }
 }
 
 /** Reads and parses `.claude/steps.json`. Returns the array or null. */

@@ -81,9 +81,8 @@ const STEPS_INSTRUCTION =
   '  detail: one sentence max, only if it adds context the summary and next fields cannot carry — omit otherwise.\n' +
   '  status: starting | investigating | implementing | testing | awaiting_review | done.\n' +
   '  files_touched: only files you actually wrote or modified in this step, not files you read.\n' +
-  '  timestamp: ISO 8601.\n' +
   'Sub-agents: when you spawn sub-agents, append one entry describing what each will work on. When they finish, append a completion entry with their outcome.\n' +
-  'Example: {"summary":"Auth middleware complete — JWT + rate-limit","next":"Write integration tests for token expiry edge cases","status":"implementing","files_touched":["src/middleware/auth.ts"],"timestamp":"2024-01-15T10:30:00Z"}.\n' +
+  'Example: {"summary":"Auth middleware complete — JWT + rate-limit","next":"Write integration tests for token expiry edge cases","status":"implementing","files_touched":["src/middleware/auth.ts"]}.\n' +
   'When you want the user to review your work: write an entry with status "awaiting_review", set next to the decision or action you need from them, then pause.';
 
 export interface CreateTaskOptions {

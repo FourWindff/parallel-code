@@ -61,6 +61,7 @@ interface TaskStepsSectionProps {
   isActive: boolean;
   onFileClick?: (file: string) => void;
   onNaturalHeight?: (h: number) => void;
+  onNextClick?: (text: string) => void;
 }
 
 /** Clickable file path badge shown on step cards. */
@@ -432,11 +433,19 @@ export function TaskStepsSection(props: TaskStepsSectionProps) {
                 </div>
                 <Show when={step().next}>
                   <div
+                    onClick={() => props.onNextClick?.(step().next ?? '')}
+                    onMouseEnter={(e) => {
+                      if (props.onNextClick) e.currentTarget.style.opacity = '0.75';
+                    }}
+                    onMouseLeave={(e) => {
+                      e.currentTarget.style.opacity = '1';
+                    }}
                     style={{
                       'font-size': sf(12),
                       color: theme.accent,
                       'margin-top': '4px',
                       'line-height': '1.4',
+                      cursor: props.onNextClick ? 'pointer' : 'default',
                     }}
                   >
                     → `{truncate(step().next ?? '', 160)}`

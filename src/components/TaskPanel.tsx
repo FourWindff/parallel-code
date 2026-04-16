@@ -10,6 +10,7 @@ import {
   triggerFocus,
   clearPendingAction,
   showNotification,
+  sendPrompt,
 } from '../store/store';
 import { useFocusRegistration } from '../lib/focus-registration';
 import { ResizablePanel, type PanelChild } from './ResizablePanel';
@@ -205,6 +206,9 @@ export function TaskPanel(props: TaskPanelProps) {
           isActive={props.isActive}
           onFileClick={(file) => setDiffScrollTarget(file)}
           onNaturalHeight={setStepsNaturalHeight}
+          onNextClick={(text) => {
+            void sendPrompt(props.task.id, firstAgentId(), text);
+          }}
         />
       ),
     };

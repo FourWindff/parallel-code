@@ -16,6 +16,8 @@ import {
   isDockerAvailable,
   dockerImageExists,
   buildDockerImage,
+  resolveProjectDockerfile,
+  projectImageTag,
 } from './pty.js';
 import {
   ensurePlansDirectory,
@@ -92,6 +94,25 @@ function validateBranchName(name: unknown, label: string): void {
 function validateCommitHash(hash: unknown, label: string): void {
   if (typeof hash !== 'string') throw new Error(`${label} must be a string`);
   if (!/^[0-9a-f]{4,40}$/i.test(hash)) throw new Error(`${label} must be a valid hex commit hash`);
+}
+
+function getOptionalDockerfilePath(value: unknown): string | undefined {
+  assertOptionalString(value, 'dockerfilePath');
+  if (value !== undefined) validatePath(value, 'dockerfilePath');
+  return value;
+}
+
+function getOptionalBuildContext(value: unknown): string | undefined {
+  assertOptionalString(value, 'buildContext');
+  if (value !== undefined) validatePath(value, 'buildContext');
+  return value;
+}
+
+function getOptionalImageTag(value: unknown): string | undefined {
+  assertOptionalString(value, 'imageTag');
+  const imageTag = value?.trim();
+  if (imageTag === '') throw new Error('imageTag must be a non-empty string');
+  return imageTag;
 }
 
 /**
@@ -196,11 +217,31 @@ export function registerAllHandlers(win: BrowserWindow): void {
   ipcMain.handle(IPC.CheckDockerAvailable, () => isDockerAvailable());
   ipcMain.handle(IPC.CheckDockerImageExists, (_e, args) => {
     assertString(args.image, 'image');
-    return dockerImageExists(args.image);
+    const dockerfilePath = getOptionalDockerfilePath(args.dockerfilePath);
+    return dockerImageExists(args.image, dockerfilePath ? { dockerfilePath } : undefined);
   });
   ipcMain.handle(IPC.BuildDockerImage, (_e, args) => {
     assertString(args.onOutputChannel, 'onOutputChannel');
-    return buildDockerImage(win, args.onOutputChannel);
+    const dockerfilePath = getOptionalDockerfilePath(args.dockerfilePath);
+    const buildContext = getOptionalBuildContext(args.buildContext);
+    const imageTag = getOptionalImageTag(args.imageTag);
+    return buildDockerImage(
+      win,
+      args.onOutputChannel,
+      dockerfilePath || buildContext || imageTag
+        ? { dockerfilePath, buildContext, imageTag }
+        : undefined,
+    );
+  });
+  ipcMain.handle(IPC.ResolveProjectDockerfile, (_e, args) => {
+    validatePath(args.projectRoot, 'projectRoot');
+    const dockerfilePath = resolveProjectDockerfile(args.projectRoot);
+    if (!dockerfilePath) return null;
+    return {
+      dockerfilePath,
+      imageTag: projectImageTag(dockerfilePath),
+      buildContext: args.projectRoot,
+    };
   });
 
   // --- Task commands ---

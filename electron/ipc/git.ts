@@ -470,7 +470,7 @@ export async function createWorktree(
  * `.claude/settings.local.json` on startup; the targets must exist or the
  * sandbox fails before Claude launches. Create empty placeholders if missing.
  */
-function ensureClaudeSandboxFiles(worktreePath: string): void {
+export function ensureClaudeSandboxFiles(worktreePath: string): void {
   const claudeDir = path.join(worktreePath, '.claude');
   try {
     fs.mkdirSync(claudeDir, { recursive: true });

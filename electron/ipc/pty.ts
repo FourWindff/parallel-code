@@ -7,6 +7,7 @@ import { fileURLToPath } from 'url';
 import type { BrowserWindow } from 'electron';
 import { RingBuffer } from '../remote/ring-buffer.js';
 import { resolveUserShell } from '../user-shell.js';
+import { ensureClaudeSandboxFiles } from './git.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -163,6 +164,12 @@ export function spawnAgent(
   delete spawnEnv.CLAUDECODE;
   delete spawnEnv.CLAUDE_CODE_SESSION;
   delete spawnEnv.CLAUDE_CODE_ENTRYPOINT;
+
+  // Backfill sandbox placeholders for pre-existing worktrees (and anywhere
+  // Claude Code may launch). See ensureClaudeSandboxFiles for the why.
+  if (!args.dockerMode && fs.existsSync(cwd)) {
+    ensureClaudeSandboxFiles(cwd);
+  }
 
   let spawnCommand: string;
   let spawnArgs: string[];

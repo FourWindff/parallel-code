@@ -448,7 +448,7 @@ export function TaskStepsSection(props: TaskStepsSectionProps) {
                           style={{
                             height: '1px',
                             background: theme.border,
-                            margin: '4px 0 4px 28px',
+                            margin: '4px 0 4px 8px',
                             opacity: 0.5,
                           }}
                         />
@@ -477,21 +477,10 @@ export function TaskStepsSection(props: TaskStepsSectionProps) {
                           style={{
                             display: 'flex',
                             'align-items': 'center',
-                            gap: '6px',
+                            gap: '8px',
                             padding: indented() ? '0' : '3px 0',
                           }}
                         >
-                          <span
-                            style={{
-                              'font-size': sf(10),
-                              color: theme.fgSubtle,
-                              'flex-shrink': '0',
-                              width: '18px',
-                              'text-align': 'right',
-                            }}
-                          >
-                            {idx() + 1}
-                          </span>
                           <StatusDot status={String(step.status ?? '')} />
                           <span
                             style={{
@@ -551,7 +540,7 @@ export function TaskStepsSection(props: TaskStepsSectionProps) {
                       <Show when={isExpanded()}>
                         <div
                           style={{
-                            'margin-left': indented() ? `${32 + SUB_AGENT_INDENT_PX}px` : '32px',
+                            'margin-left': indented() ? `${14 + SUB_AGENT_INDENT_PX}px` : '14px',
                             padding: '4px 8px',
                             'font-size': sf(12),
                             color: theme.fgMuted,

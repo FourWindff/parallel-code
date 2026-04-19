@@ -1,6 +1,8 @@
 import { store, setStore } from './core';
 import type { LookPreset } from '../lib/look';
 import type { PersistedWindowState, TaskViewportVisibility } from './types';
+import { invoke } from '../lib/ipc';
+import { IPC } from '../../electron/ipc/channels';
 
 const MIN_SCALE = 0.5;
 const MAX_SCALE = 2.0;
@@ -87,6 +89,16 @@ export function setEditorCommand(command: string): void {
 
 export function setDockerImage(image: string): void {
   setStore('dockerImage', image || 'parallel-code-agent:latest');
+}
+
+export function setAskCodeProvider(provider: 'claude' | 'minimax'): void {
+  setStore('askCodeProvider', provider);
+}
+
+export function setMinimaxApiKey(key: string): void {
+  invoke(IPC.SetMinimaxApiKey, { key: key.trim() }).catch((e) =>
+    console.warn('Failed to set MiniMax API key:', e),
+  );
 }
 
 export function setDockerAvailable(available: boolean): void {

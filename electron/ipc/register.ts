@@ -58,6 +58,7 @@ import {
 import { createTask, deleteTask } from './tasks.js';
 import { listAgents } from './agents.js';
 import { saveAppState, loadAppState } from './persistence.js';
+import { loadKeybindings, saveKeybindings } from './keybindings.js';
 import { spawn } from 'child_process';
 import { askAboutCode, cancelAskAboutCode } from './ask-code.js';
 import { setMinimaxApiKey } from './ask-code-minimax.js';
@@ -451,6 +452,25 @@ export function registerAllHandlers(win: BrowserWindow): void {
     const json = loadAppState();
     if (json) syncTaskNamesFromJson(json);
     return json;
+  });
+
+  // --- Keybindings ---
+  function getKeybindingsDir(): string {
+    let dir = app.getPath('userData');
+    if (!app.isPackaged) {
+      const base = path.basename(dir);
+      dir = path.join(path.dirname(dir), `${base}-dev`);
+    }
+    return dir;
+  }
+
+  ipcMain.handle(IPC.LoadKeybindings, () => {
+    return loadKeybindings(getKeybindingsDir());
+  });
+
+  ipcMain.handle(IPC.SaveKeybindings, (_e, args) => {
+    assertString(args?.json, 'json');
+    saveKeybindings(getKeybindingsDir(), args.json);
   });
 
   // --- Arena persistence ---

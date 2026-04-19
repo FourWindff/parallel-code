@@ -10,6 +10,8 @@ import { TERMINAL_SCROLLBACK_LINES } from '../lib/terminalConstants';
 import { getTerminalTheme } from '../lib/theme';
 import { matchesGlobalShortcut } from '../lib/shortcuts';
 import { isMac } from '../lib/platform';
+import { resolvedBindings } from '../store/keybindings';
+import { matchesKeyEvent } from '../lib/keybindings';
 import { store, setTaskLastInputAt } from '../store/store';
 import { registerTerminal, unregisterTerminal, markDirty } from '../lib/terminalFitManager';
 import type { PtyOutput } from '../ipc/types';
@@ -75,6 +77,13 @@ interface TerminalViewProps {
 // Status parsing only needs recent output. Capping forwarded bytes avoids
 // expensive full-chunk decoding during large terminal bursts.
 const STATUS_ANALYSIS_MAX_BYTES = 8 * 1024;
+
+/** Terminal-layer bindings — filtered from resolved bindings.
+ *  Called in the key handler (hot path); resolveBindings walks the full
+ *  defaults list on each call, which is fine at human typing speed. */
+function getTerminalBindings() {
+  return resolvedBindings().filter((b) => b.layer === 'terminal');
+}
 
 export function TerminalView(props: TerminalViewProps) {
   let containerRef!: HTMLDivElement;
@@ -218,51 +227,36 @@ export function TerminalView(props: TerminalViewProps) {
       // Let global app shortcuts pass through to the window handler
       if (matchesGlobalShortcut(e)) return false;
 
-      const isCopy = isMac
-        ? e.metaKey && !e.shiftKey && e.key === 'c'
-        : e.ctrlKey && e.shiftKey && e.key === 'C';
-      const isPaste = isMac
-        ? e.metaKey && !e.shiftKey && e.key === 'v'
-        : e.ctrlKey && e.shiftKey && e.key === 'V';
+      // Look up terminal bindings from registry
+      for (const binding of getTerminalBindings()) {
+        if (!matchesKeyEvent(e, binding)) continue;
 
-      if (isCopy) {
-        const sel = term?.getSelection();
-        if (sel) navigator.clipboard.writeText(sel);
-        return false;
-      }
-
-      if (isPaste) {
         e.preventDefault();
-        (async () => {
-          const text = await navigator.clipboard.readText().catch(() => '');
-          if (text) {
-            enqueueInput(text);
-            return;
-          }
-          // Fall back to clipboard image → save to temp file and paste path
-          const filePath = await invoke<string | null>(IPC.SaveClipboardImage);
-          if (filePath) enqueueInput(filePath);
-        })().catch(() => {});
-        return false;
-      }
 
-      // Shift+Enter → send as Alt+Enter (newline in CLI agents like Claude Code)
-      if (e.key === 'Enter' && e.shiftKey && !e.metaKey && !e.ctrlKey && !e.altKey) {
-        e.preventDefault();
-        enqueueInput('\x1b\r');
-        return false;
-      }
-
-      // Cmd+Left/Right → Home/End (macOS only; on Linux Ctrl+Arrow is word-jump)
-      if (isMac && e.metaKey && !e.altKey && !e.ctrlKey && !e.shiftKey) {
-        if (e.key === 'ArrowLeft') {
-          e.preventDefault();
-          enqueueInput('\x1b[H'); // Home
+        // Special actions that need custom handling
+        if (binding.action === 'copy') {
+          const sel = term?.getSelection();
+          if (sel) navigator.clipboard.writeText(sel);
           return false;
         }
-        if (e.key === 'ArrowRight') {
-          e.preventDefault();
-          enqueueInput('\x1b[F'); // End
+
+        if (binding.action === 'paste') {
+          (async () => {
+            const text = await navigator.clipboard.readText().catch(() => '');
+            if (text) {
+              enqueueInput(text);
+              return;
+            }
+            // Fall back to clipboard image → save to temp file and paste path
+            const filePath = await invoke<string | null>(IPC.SaveClipboardImage);
+            if (filePath) enqueueInput(filePath);
+          })().catch(() => {});
+          return false;
+        }
+
+        // Generic escape sequence bindings
+        if (binding.escapeSequence) {
+          enqueueInput(binding.escapeSequence);
           return false;
         }
       }

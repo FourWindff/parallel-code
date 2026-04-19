@@ -1,6 +1,10 @@
 import type { AgentDef, StepEntry, WorktreeStatus } from '../ipc/types';
 import type { DockerSource } from '../lib/docker';
 import type { LookPreset } from '../lib/look';
+import type { KeyBinding } from '../lib/keybindings';
+
+/** A user override for a binding: partial key/modifiers to apply, or null to unbind. */
+export type KeybindingOverride = Partial<Pick<KeyBinding, 'key' | 'modifiers'>> | null;
 
 export type GitIsolationMode = 'worktree' | 'direct';
 
@@ -141,6 +145,7 @@ export interface PersistedState {
   dockerImage?: string;
   askCodeProvider?: 'claude' | 'minimax';
   customAgents?: AgentDef[];
+  keybindingMigrationDismissed?: boolean;
   focusMode?: boolean;
 }
 
@@ -215,5 +220,9 @@ export interface AppStore {
   missingProjectIds: Record<string, true>;
   remoteAccess: RemoteAccess;
   showArena: boolean;
+  keybindingPreset: string;
+  /** Per-preset user overrides. Outer key = preset ID, inner = binding ID → override. */
+  keybindingOverridesByPreset: Record<string, Record<string, KeybindingOverride>>;
+  keybindingMigrationDismissed: boolean;
   focusMode: boolean;
 }

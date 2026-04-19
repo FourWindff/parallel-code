@@ -46,7 +46,8 @@ import {
 } from './store/store';
 import { isGitHubUrl } from './lib/github-url';
 import type { PersistedWindowState } from './store/types';
-import { registerShortcut, initShortcuts } from './lib/shortcuts';
+import { initShortcuts, registerShortcut, registerFromRegistry } from './lib/shortcuts';
+import { resolvedBindings, loadKeybindings, dismissMigrationBanner } from './store/keybindings';
 import { setupAutosave } from './store/autosave';
 import { isMac, mod } from './lib/platform';
 import { createCtrlWheelZoomHandler } from './lib/wheelZoom';
@@ -306,6 +307,7 @@ function App() {
       () => setDockerAvailable(false),
     );
     await loadState();
+    await loadKeybindings();
 
     // Restore plan content for tasks that had a plan file before restart
     for (const taskId of [...store.taskOrder, ...store.collapsedTaskOrder]) {
@@ -433,49 +435,14 @@ function App() {
       }
     });
 
-    // Navigation shortcuts (all global — work even in terminals)
-    registerShortcut({ key: 'ArrowUp', alt: true, global: true, handler: () => navigateRow('up') });
-    registerShortcut({
-      key: 'ArrowDown',
-      alt: true,
-      global: true,
-      handler: () => navigateRow('down'),
-    });
-    registerShortcut({
-      key: 'ArrowLeft',
-      alt: true,
-      global: true,
-      handler: () => navigateColumn('left'),
-    });
-    registerShortcut({
-      key: 'ArrowRight',
-      alt: true,
-      global: true,
-      handler: () => navigateColumn('right'),
-    });
-
-    // Task reordering
-    registerShortcut({
-      key: 'ArrowLeft',
-      cmdOrCtrl: true,
-      shift: true,
-      global: true,
-      handler: () => moveActiveTask('left'),
-    });
-    registerShortcut({
-      key: 'ArrowRight',
-      cmdOrCtrl: true,
-      shift: true,
-      global: true,
-      handler: () => moveActiveTask('right'),
-    });
-
-    // Task actions
-    registerShortcut({
-      key: 'w',
-      cmdOrCtrl: true,
-      global: true,
-      handler: () => {
+    const actionHandlers: Record<string, (e: KeyboardEvent) => void> = {
+      'navigateRow:up': () => navigateRow('up'),
+      'navigateRow:down': () => navigateRow('down'),
+      'navigateColumn:left': () => navigateColumn('left'),
+      'navigateColumn:right': () => navigateColumn('right'),
+      'moveActiveTask:left': () => moveActiveTask('left'),
+      'moveActiveTask:right': () => moveActiveTask('right'),
+      closeShell: () => {
         const taskId = store.activeTaskId;
         if (!taskId) return;
         const panel = store.focusedPanel[taskId] ?? '';
@@ -485,13 +452,7 @@ function App() {
           if (shellId) closeShell(taskId, shellId);
         }
       },
-    });
-    registerShortcut({
-      key: 'W',
-      cmdOrCtrl: true,
-      shift: true,
-      global: true,
-      handler: () => {
+      closeTask: () => {
         const id = store.activeTaskId;
         if (!id) return;
         if (store.terminals[id]) {
@@ -500,95 +461,28 @@ function App() {
         }
         if (store.tasks[id]) setPendingAction({ type: 'close', taskId: id });
       },
-    });
-    registerShortcut({
-      key: 'M',
-      cmdOrCtrl: true,
-      shift: true,
-      global: true,
-      handler: () => {
+      mergeTask: () => {
         const id = store.activeTaskId;
         if (id && store.tasks[id]) setPendingAction({ type: 'merge', taskId: id });
       },
-    });
-    registerShortcut({
-      key: 'P',
-      cmdOrCtrl: true,
-      shift: true,
-      global: true,
-      handler: () => {
+      pushTask: () => {
         const id = store.activeTaskId;
         if (id && store.tasks[id]) setPendingAction({ type: 'push', taskId: id });
       },
-    });
-    registerShortcut({
-      key: 'T',
-      cmdOrCtrl: true,
-      shift: true,
-      global: true,
-      handler: () => {
+      spawnShell: () => {
         const id = store.activeTaskId;
         if (id && store.tasks[id]) spawnShellForTask(id);
       },
-    });
-    registerShortcut({
-      key: 'Enter',
-      cmdOrCtrl: true,
-      global: true,
-      handler: () => sendActivePrompt(),
-    });
-
-    // App shortcuts
-    registerShortcut({
-      key: 'D',
-      cmdOrCtrl: true,
-      shift: true,
-      global: true,
-      handler: (e) => {
+      sendPrompt: () => sendActivePrompt(),
+      createTerminal: (e) => {
         if (!e.repeat) createTerminal();
       },
-    });
-    registerShortcut({
-      key: 'n',
-      cmdOrCtrl: true,
-      global: true,
-      handler: () => toggleNewTaskDialog(true),
-    });
-    registerShortcut({
-      key: 'a',
-      cmdOrCtrl: true,
-      shift: true,
-      global: true,
-      handler: () => toggleNewTaskDialog(true),
-    });
-    registerShortcut({ key: 'b', cmdOrCtrl: true, handler: () => toggleSidebar() });
-    registerShortcut({
-      key: '/',
-      cmdOrCtrl: true,
-      global: true,
-      dialogSafe: true,
-      handler: () => toggleHelpDialog(),
-    });
-    registerShortcut({
-      key: ',',
-      cmdOrCtrl: true,
-      global: true,
-      dialogSafe: true,
-      handler: () => toggleSettingsDialog(),
-    });
-    registerShortcut({
-      key: 'F1',
-      global: true,
-      dialogSafe: true,
-      handler: () => toggleHelpDialog(),
-    });
-    registerShortcut({
-      key: 'Escape',
-      dialogSafe: true,
-      handler: () => {
-        if (store.showArena) {
-          return;
-        }
+      newTask: () => toggleNewTaskDialog(true),
+      toggleSidebar: () => toggleSidebar(),
+      toggleHelp: () => toggleHelpDialog(),
+      toggleSettings: () => toggleSettingsDialog(),
+      closeDialogs: () => {
+        if (store.showArena) return;
         if (store.showHelpDialog) {
           toggleHelpDialog(false);
           return;
@@ -602,13 +496,14 @@ function App() {
           return;
         }
       },
-    });
-    // Zoom in: three variants because keyboard layouts differ.
-    // matches() requires an exact shift-state match (!!e.shiftKey === !!s.shift),
-    // so we need separate registrations for each case:
+      resetZoom: () => resetGlobalScale(),
+    };
+
+    // Zoom in/out: variants for keyboard layouts where matches() needs an
+    // exact shift-state match (so each case needs its own registration).
     //   key '=' no shift  — Ctrl+= on US/UK keyboards
-    //   key '+' shift     — Ctrl+Shift+= on US/UK keyboards (e.key is '+' when Shift held)
-    //   key '+' no shift  — Ctrl++ on European keyboards (dedicated + key) and NumPad+
+    //   key '+' shift     — Ctrl+Shift+= on US/UK keyboards
+    //   key '+' no shift  — Ctrl++ on European keyboards and NumPad+
     registerShortcut({
       key: '=',
       cmdOrCtrl: true,
@@ -638,14 +533,10 @@ function App() {
       dialogSafe: true,
       handler: () => adjustGlobalScale(-1),
     });
-    registerShortcut({
-      key: '0',
-      cmdOrCtrl: true,
-      global: true,
-      dialogSafe: true,
-      handler: () => {
-        resetGlobalScale();
-      },
+
+    createEffect(() => {
+      const cleanup = registerFromRegistry(resolvedBindings(), actionHandlers);
+      onCleanup(cleanup);
     });
 
     onCleanup(() => {
@@ -740,6 +631,75 @@ function App() {
         </Show>
         <Show when={isMac}>
           <div class="mac-titlebar-spacer" data-tauri-drag-region />
+        </Show>
+        <Show when={!store.keybindingMigrationDismissed}>
+          <div
+            style={{
+              background: theme.bgInput,
+              border: `1px solid ${theme.border}`,
+              'border-bottom': `1px solid ${theme.border}`,
+              padding: '8px 16px',
+              display: 'flex',
+              'align-items': 'center',
+              'justify-content': 'space-between',
+              'font-size': '13px',
+              color: theme.fg,
+              'flex-shrink': '0',
+            }}
+          >
+            <span>
+              Keyboard shortcuts are now configurable.{' '}
+              <button
+                type="button"
+                onClick={() => {
+                  toggleHelpDialog(true);
+                  dismissMigrationBanner();
+                }}
+                style={{
+                  background: 'transparent',
+                  border: 'none',
+                  padding: '0',
+                  font: 'inherit',
+                  color: theme.accent,
+                  cursor: 'pointer',
+                  'text-decoration': 'underline',
+                }}
+              >
+                Pick a preset for your coding agent
+              </button>{' '}
+              or{' '}
+              <button
+                type="button"
+                onClick={() => dismissMigrationBanner()}
+                style={{
+                  background: 'transparent',
+                  border: 'none',
+                  padding: '0',
+                  font: 'inherit',
+                  color: theme.fgMuted,
+                  cursor: 'pointer',
+                  'text-decoration': 'underline',
+                }}
+              >
+                dismiss
+              </button>
+              .
+            </span>
+            <button
+              onClick={() => dismissMigrationBanner()}
+              style={{
+                background: 'transparent',
+                border: 'none',
+                color: theme.fgMuted,
+                cursor: 'pointer',
+                'font-size': '16px',
+                padding: '0 4px',
+                'line-height': '1',
+              }}
+            >
+              &times;
+            </button>
+          </div>
         </Show>
         <main style={{ flex: '1', display: 'flex', overflow: 'hidden' }}>
           <Show when={store.sidebarVisible}>

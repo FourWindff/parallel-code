@@ -60,6 +60,7 @@ export async function saveState(): Promise<void> {
     dockerImage: store.dockerImage !== 'parallel-code-agent:latest' ? store.dockerImage : undefined,
     askCodeProvider: store.askCodeProvider !== 'claude' ? store.askCodeProvider : undefined,
     customAgents: store.customAgents.length > 0 ? [...store.customAgents] : undefined,
+    focusMode: store.focusMode || undefined,
   };
 
   for (const taskId of store.taskOrder) {
@@ -210,6 +211,7 @@ interface LegacyPersistedState {
   minimaxApiKey?: unknown;
   customAgents?: unknown;
   terminals?: unknown;
+  focusMode?: unknown;
 }
 
 export async function loadState(): Promise<void> {
@@ -331,6 +333,8 @@ export async function loadState(): Promise<void> {
 
       const rawEditorCommand = raw.editorCommand;
       s.editorCommand = typeof rawEditorCommand === 'string' ? rawEditorCommand.trim() : '';
+
+      s.focusMode = raw.focusMode === true;
 
       const rawDockerImage = raw.dockerImage;
       s.dockerImage =
@@ -479,6 +483,18 @@ export async function loadState(): Promise<void> {
       // Defensive: ensure no task appears in both arrays (corrupted state)
       const activeSet = new Set(s.taskOrder);
       s.collapsedTaskOrder = s.collapsedTaskOrder.filter((id) => !activeSet.has(id));
+
+      // Focus mode requires a valid active panel; without one, every panel is
+      // hidden and the strip reads blank. Repair or drop focus mode.
+      if (s.focusMode) {
+        const activeValid =
+          s.activeTaskId !== null &&
+          (s.tasks[s.activeTaskId] !== undefined || s.terminals[s.activeTaskId] !== undefined);
+        if (!activeValid) {
+          s.activeTaskId = s.taskOrder[0] ?? null;
+          if (s.activeTaskId === null) s.focusMode = false;
+        }
+      }
 
       // Set activeAgentId from the active task
       if (s.activeTaskId && s.tasks[s.activeTaskId]) {

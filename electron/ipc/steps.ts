@@ -29,6 +29,7 @@ const processedCount = new Map<string, number>();
 function sendStepsContent(win: BrowserWindow, taskId: string, stepsFile: string): void {
   if (win.isDestroyed()) return;
   const steps = readStepsFile(stepsFile);
+  console.warn('[steps.send]', taskId, 'len=', steps?.length ?? 'null');
   if (steps) applyTimestamps(steps, stepsFile, taskId);
   win.webContents.send(IPC.StepsContent, { taskId, steps });
 }
@@ -155,7 +156,8 @@ export function startStepsWatcher(win: BrowserWindow, taskId: string, worktreePa
   };
 
   // filename may be null on some platforms; if present, filter to steps.json only
-  const onChange = (_event: string, filename: string | Buffer | null) => {
+  const onChange = (event: string, filename: string | Buffer | null) => {
+    console.warn('[steps.watch]', taskId, event, String(filename));
     if (filename !== null && filename !== 'steps.json') return;
     const current = watchers.get(taskId);
     if (!current) return;

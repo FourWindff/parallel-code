@@ -484,7 +484,7 @@ export function TaskStepsSection(props: TaskStepsSectionProps) {
                           <StatusDot status={String(step.status ?? '')} />
                           <span
                             style={{
-                              'font-size': sf(12),
+                              'font-size': sf(13),
                               'font-weight': '600',
                               color: theme.fg,
                               overflow: 'hidden',
@@ -542,7 +542,7 @@ export function TaskStepsSection(props: TaskStepsSectionProps) {
                           style={{
                             'margin-left': indented() ? `${14 + SUB_AGENT_INDENT_PX}px` : '14px',
                             padding: '4px 8px',
-                            'font-size': sf(12),
+                            'font-size': sf(13),
                             color: theme.fgMuted,
                             'border-left': `1px solid ${theme.border}`,
                           }}
@@ -628,7 +628,7 @@ export function TaskStepsSection(props: TaskStepsSectionProps) {
                     <StatusDot status={String(step().status ?? '')} />
                     <span
                       style={{
-                        'font-size': sf(12),
+                        'font-size': sf(13),
                         'font-weight': '600',
                         color: theme.fg,
                         flex: '1',
@@ -671,7 +671,7 @@ export function TaskStepsSection(props: TaskStepsSectionProps) {
                         display: 'flex',
                         'align-items': 'flex-start',
                         gap: '4px',
-                        'font-size': sf(12),
+                        'font-size': sf(13),
                         color: theme.fgMuted,
                         'margin-top': '4px',
                         'line-height': '1.4',

@@ -22,7 +22,7 @@ import {
 import type { GitIsolationMode } from '../store/types';
 import { toBranchName, sanitizeBranchPrefix } from '../lib/branch-name';
 import { SegmentedButtons } from './SegmentedButtons';
-import { cleanTaskName } from '../lib/clean-task-name';
+import { autoTaskNameFromPrompt } from '../lib/clean-task-name';
 import { extractGitHubUrl } from '../lib/github-url';
 import { theme, sectionLabelStyle, bannerStyle } from '../lib/theme';
 import { AgentSelector } from './AgentSelector';
@@ -417,10 +417,8 @@ export function NewTaskDialog(props: NewTaskDialogProps) {
     if (n) return n;
     const p = prompt().trim();
     if (!p) return '';
-    // Use first line, clean filler phrases, truncate at ~40 chars on word boundary
-    const firstLine = cleanTaskName(p.split('\n')[0]);
-    if (firstLine.length <= 40) return firstLine;
-    return firstLine.slice(0, 40).replace(/\s+\S*$/, '') || firstLine.slice(0, 40);
+    // Keep the stored task/worktree name concise; the title bar can render a longer label.
+    return autoTaskNameFromPrompt(p);
   };
 
   const branchPreview = () => {

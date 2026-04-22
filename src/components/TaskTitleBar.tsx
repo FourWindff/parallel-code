@@ -15,6 +15,7 @@ import { theme } from '../lib/theme';
 import { badgeStyle } from '../lib/badgeStyle';
 import { handleDragReorder } from '../lib/dragReorder';
 import { getTaskDockerBadgeLabel } from '../lib/docker';
+import { displayTaskNameFromPrompt, isAutoTaskNameFromPrompt } from '../lib/clean-task-name';
 import type { Task } from '../store/types';
 
 interface TaskTitleBarProps {
@@ -30,6 +31,13 @@ interface TaskTitleBarProps {
 
 export function TaskTitleBar(props: TaskTitleBarProps) {
   const dockerBadgeLabel = () => getTaskDockerBadgeLabel(props.task.dockerSource);
+  const titleLabel = () => {
+    const initialPrompt = props.task.savedInitialPrompt?.trim();
+    if (!initialPrompt || !isAutoTaskNameFromPrompt(props.task.name, initialPrompt)) {
+      return props.task.name;
+    }
+    return displayTaskNameFromPrompt(initialPrompt) || props.task.name;
+  };
 
   function handleTitleMouseDown(e: MouseEvent) {
     handleDragReorder(e, {
@@ -82,7 +90,7 @@ export function TaskTitleBar(props: TaskTitleBarProps) {
           <span style={badgeStyle(theme.accent)}>Imported</span>
         </Show>
         <EditableText
-          value={props.task.name}
+          value={titleLabel()}
           onCommit={(v) => updateTaskName(props.task.id, v)}
           class="editable-text"
           title={props.task.savedInitialPrompt}

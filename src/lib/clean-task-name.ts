@@ -41,3 +41,45 @@ export function cleanTaskName(text: string): string {
 
   return result || text.trim();
 }
+
+export const AUTO_TASK_NAME_MAX_LENGTH = 40;
+export const DISPLAY_TASK_NAME_MAX_LENGTH = 120;
+
+function firstCleanTaskLine(text: string): string {
+  return cleanTaskName(text.trim().split('\n')[0] ?? '');
+}
+
+function truncateOnWordBoundary(text: string, maxLength: number): string {
+  if (text.length <= maxLength) return text;
+
+  const shortened = text.slice(0, maxLength).replace(/\s+\S*$/, '');
+  return shortened || text.slice(0, maxLength);
+}
+
+export function autoTaskNameFromPrompt(prompt: string): string {
+  const trimmed = prompt.trim();
+  if (!trimmed) return '';
+
+  return truncateOnWordBoundary(firstCleanTaskLine(trimmed), AUTO_TASK_NAME_MAX_LENGTH);
+}
+
+export function displayTaskNameFromPrompt(prompt: string): string {
+  const trimmed = prompt.trim();
+  if (!trimmed) return '';
+
+  return truncateOnWordBoundary(firstCleanTaskLine(trimmed), DISPLAY_TASK_NAME_MAX_LENGTH);
+}
+
+export function isAutoTaskNameFromPrompt(name: string, prompt: string): boolean {
+  const trimmedName = name.trim();
+  if (!trimmedName) return false;
+
+  const trimmedPrompt = prompt.trim();
+  if (!trimmedPrompt) return false;
+
+  const firstLine = firstCleanTaskLine(trimmedPrompt);
+  return (
+    trimmedName === truncateOnWordBoundary(firstLine, 40) ||
+    trimmedName === truncateOnWordBoundary(firstLine, 50)
+  );
+}

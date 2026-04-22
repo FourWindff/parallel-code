@@ -79,6 +79,7 @@ export function ChangedFilesList(props: ChangedFilesListProps) {
   function handleKeyDown(e: KeyboardEvent) {
     const rows = visibleRows();
     if (rows.length === 0) return;
+    if (e.altKey) return;
     const idx = selectedIndex();
 
     if (e.key === 'ArrowDown') {

@@ -168,7 +168,7 @@ describe('from-branch diff helpers (pickMergeBase wiring)', () => {
       expect(mergeBaseCall).toContain('main');
     });
 
-    it('feeds the picked merge-base SHA into the diff command', async () => {
+    it('feeds the picked base ref into the one-way diff command', async () => {
       const calls: string[][] = [];
       setupMock(
         calls,
@@ -184,8 +184,7 @@ describe('from-branch diff helpers (pickMergeBase wiring)', () => {
 
       const diffCall = calls.find((a) => a[0] === 'diff');
       expect(diffCall).toBeDefined();
-      expect(diffCall).toContain(SHA_LOCAL);
-      expect(diffCall).toContain('feature');
+      expect(diffCall).toContain('develop...feature');
     });
   });
 
@@ -209,7 +208,7 @@ describe('from-branch diff helpers (pickMergeBase wiring)', () => {
       expect(mergeBaseCall).toContain('main');
     });
 
-    it('feeds the picked merge-base SHA into the diff command', async () => {
+    it('feeds the picked base ref into the one-way diff command', async () => {
       const calls: string[][] = [];
       setupMock(
         calls,
@@ -225,13 +224,12 @@ describe('from-branch diff helpers (pickMergeBase wiring)', () => {
 
       const diffCall = calls.find((a) => a[0] === 'diff');
       expect(diffCall).toBeDefined();
-      expect(diffCall).toContain(SHA_LOCAL);
-      expect(diffCall).toContain('feature');
+      expect(diffCall).toContain('develop...feature');
     });
   });
 
   describe('getFileDiffFromBranch', () => {
-    it('feeds the picked merge-base SHA into the diff and the show command', async () => {
+    it('feeds the picked base ref into the diff and the merge-base SHA into the show command', async () => {
       const calls: string[][] = [];
       setupMock(
         calls,
@@ -247,8 +245,7 @@ describe('from-branch diff helpers (pickMergeBase wiring)', () => {
 
       const diffCall = calls.find((a) => a[0] === 'diff');
       expect(diffCall).toBeDefined();
-      expect(diffCall).toContain(SHA_LOCAL);
-      expect(diffCall).toContain('feature');
+      expect(diffCall).toContain('develop...feature');
 
       // The redundant inline `git merge-base baseRef branchName` is gone — the
       // only merge-base calls should be the picker's two probes plus optional
@@ -284,8 +281,8 @@ describe('pickMergeBase (via getChangedFilesFromBranch)', () => {
     await getChangedFilesFromBranch(uniqueRepoPath(), 'feature', 'main');
 
     const diffCall = calls.find((a) => a[0] === 'diff');
-    expect(diffCall).toContain(SHA_LOCAL);
-    expect(diffCall).not.toContain(SHA_ORIGIN);
+    expect(diffCall).toContain('main...feature');
+    expect(diffCall).not.toContain('origin/main...feature');
   });
 
   it('picks origin merge-base when local merge-base is its ancestor', async () => {
@@ -306,8 +303,8 @@ describe('pickMergeBase (via getChangedFilesFromBranch)', () => {
     await getChangedFilesFromBranch(uniqueRepoPath(), 'feature', 'main');
 
     const diffCall = calls.find((a) => a[0] === 'diff');
-    expect(diffCall).toContain(SHA_ORIGIN);
-    expect(diffCall).not.toContain(SHA_LOCAL);
+    expect(diffCall).toContain('origin/main...feature');
+    expect(diffCall).not.toContain('main...feature');
   });
 
   it('prefers local on divergence (neither merge-base is an ancestor of the other)', async () => {
@@ -328,8 +325,8 @@ describe('pickMergeBase (via getChangedFilesFromBranch)', () => {
     await getChangedFilesFromBranch(uniqueRepoPath(), 'feature', 'main');
 
     const diffCall = calls.find((a) => a[0] === 'diff');
-    expect(diffCall).toContain(SHA_LOCAL);
-    expect(diffCall).not.toContain(SHA_ORIGIN);
+    expect(diffCall).toContain('main...feature');
+    expect(diffCall).not.toContain('origin/main...feature');
   });
 
   it('uses local merge-base when only the local ref exists', async () => {
@@ -347,7 +344,7 @@ describe('pickMergeBase (via getChangedFilesFromBranch)', () => {
     await getChangedFilesFromBranch(uniqueRepoPath(), 'feature', 'main');
 
     const diffCall = calls.find((a) => a[0] === 'diff');
-    expect(diffCall).toContain(SHA_LOCAL);
+    expect(diffCall).toContain('main...feature');
 
     const ancestorCalls = calls.filter((a) => a[0] === 'merge-base' && a[1] === '--is-ancestor');
     expect(ancestorCalls.length).toBe(0);
@@ -368,7 +365,7 @@ describe('pickMergeBase (via getChangedFilesFromBranch)', () => {
     await getChangedFilesFromBranch(uniqueRepoPath(), 'feature', 'main');
 
     const diffCall = calls.find((a) => a[0] === 'diff');
-    expect(diffCall).toContain(SHA_ORIGIN);
+    expect(diffCall).toContain('origin/main...feature');
   });
 
   it('returns no committed diff when neither ref resolves', async () => {
@@ -384,8 +381,7 @@ describe('pickMergeBase (via getChangedFilesFromBranch)', () => {
 
     const result = await getChangedFilesFromBranch(uniqueRepoPath(), 'feature', 'gone');
 
-    // detectMergeBase falls back to headRef ('feature'), so the diff range
-    // becomes feature..feature → empty.
+    // detectOneWayDiffRange falls back to feature...feature → empty.
     expect(result).toEqual([]);
 
     const ancestorCalls = calls.filter((a) => a[0] === 'merge-base' && a[1] === '--is-ancestor');
@@ -408,7 +404,7 @@ describe('pickMergeBase (via getChangedFilesFromBranch)', () => {
     await getChangedFilesFromBranch(uniqueRepoPath(), 'feature', 'main');
 
     const diffCall = calls.find((a) => a[0] === 'diff');
-    expect(diffCall).toContain(SHA_LOCAL);
+    expect(diffCall).toContain('main...feature');
 
     // Identical SHAs short-circuit before any --is-ancestor probe.
     const ancestorCalls = calls.filter((a) => a[0] === 'merge-base' && a[1] === '--is-ancestor');
@@ -434,8 +430,9 @@ function uniqueWorktreePath(): string {
 /**
  * Build a mock handler for worktree-based functions.
  *
- * No-remote scenario: detectMergeBase returns MERGE_BASE.  All diff commands
- * use the merge-base ref for one-way diffs (feature branch changes only).
+ * No-remote scenario: detectMergeBase returns MERGE_BASE. Committed snapshot
+ * diffs use the ordered local base ref range (`base...head`); dirty worktree
+ * diffs use the merge-base SHA directly so tracked local edits are included.
  */
 function buildWorktreeMockHandler(opts: {
   mergeBase?: string;
@@ -481,13 +478,12 @@ function buildWorktreeMockHandler(opts: {
       return;
     }
 
-    // diff --raw --numstat <mergeBase> <head> — committed changes (one-way)
+    // diff --raw --numstat <base>...<head> — committed changes (one-way)
     if (
       cmd === 'diff' &&
       args.includes('--raw') &&
       args.includes('--numstat') &&
-      args.includes(mergeBase) &&
-      args.includes(HEAD_HASH)
+      args.some((arg) => arg.endsWith(`...${HEAD_HASH}`))
     ) {
       cb(null, opts.committedRawNumstat ?? '', '');
       return;
@@ -505,17 +501,16 @@ function buildWorktreeMockHandler(opts: {
       return;
     }
 
-    // diff -U3 <mergeBase> — getAllFileDiffs unified diff (one-way)
+    // diff -U3 <mergeBase> — getAllFileDiffs unified diff including tracked local edits
     if (cmd === 'diff' && args.includes('-U3') && args.includes(mergeBase)) {
       cb(null, opts.diffOutput ?? '', '');
       return;
     }
 
-    // diff <mergeBase> <head> -- <path> — getFileDiff committed diff (one-way)
+    // diff <base>...<head> -- <path> — getFileDiff committed diff (one-way)
     if (
       cmd === 'diff' &&
-      args.includes(mergeBase) &&
-      args.includes(HEAD_HASH) &&
+      args.some((arg) => arg.endsWith(`...${HEAD_HASH}`)) &&
       args.includes('--')
     ) {
       cb(null, opts.diffOutput ?? '', '');
@@ -680,7 +675,7 @@ describe('getChangedFiles (worktree-based, merge-base diff)', () => {
       expect(files).toEqual([]);
     });
 
-    it('should diff against merge-base, not branch tip', async () => {
+    it('should use a base-to-head one-way range, not branch-tip-to-base', async () => {
       const calls: string[][] = [];
       setupMock(
         calls,
@@ -691,16 +686,17 @@ describe('getChangedFiles (worktree-based, merge-base diff)', () => {
 
       await getChangedFiles(uniqueWorktreePath(), 'main');
 
-      // The committed diff should use MERGE_BASE, not MAIN_TIP
+      // The committed diff must be ordered base...head, not head...base.
       const diffCall = calls.find(
         (a) =>
           a[0] === 'diff' &&
           a.includes('--raw') &&
           a.includes('--numstat') &&
-          a.includes(HEAD_HASH),
+          a.some((arg) => arg.endsWith(`...${HEAD_HASH}`)),
       );
       expect(diffCall).toBeDefined();
-      expect(diffCall).toContain(MERGE_BASE);
+      expect(diffCall).toContain(`main...${HEAD_HASH}`);
+      expect(diffCall).not.toContain(`${HEAD_HASH}...main`);
     });
 
     it('probes both local and origin refs when both exist', async () => {
@@ -797,7 +793,7 @@ describe('getAllFileDiffs (worktree-based, merge-base diff)', () => {
     vi.clearAllMocks();
   });
 
-  it('should diff against merge-base without file filtering', async () => {
+  it('should diff the working tree from the merge-base without file filtering', async () => {
     const calls: string[][] = [];
     setupMock(
       calls,
@@ -812,6 +808,7 @@ describe('getAllFileDiffs (worktree-based, merge-base diff)', () => {
     const u3Call = calls.find((a) => a[0] === 'diff' && a.includes('-U3'));
     expect(u3Call).toBeDefined();
     expect(u3Call).toContain(MERGE_BASE);
+    expect(u3Call).not.toContain('main...');
     // No file filter (no -- separator)
     expect(u3Call).not.toContain('--');
   });
@@ -922,7 +919,7 @@ describe('getFileDiff (worktree-based, merge-base diff)', () => {
     expect(result.oldContent).toBe('');
   });
 
-  it('should issue diff command against merge-base ref', async () => {
+  it('should issue diff command as a one-way base-to-head range', async () => {
     const calls: string[][] = [];
     setupMock(
       calls,
@@ -939,7 +936,7 @@ describe('getFileDiff (worktree-based, merge-base diff)', () => {
 
     const diffCall = calls.find((a) => a[0] === 'diff' && a.includes('--'));
     expect(diffCall).toBeDefined();
-    expect(diffCall).toContain(MERGE_BASE);
+    expect(diffCall).toContain(`main...${HEAD_HASH}`);
   });
 
   it('should include HEAD hash in the diff command', async () => {
@@ -958,7 +955,7 @@ describe('getFileDiff (worktree-based, merge-base diff)', () => {
     await getFileDiff(uniqueWorktreePath(), 'file.ts', 'main');
 
     const diffCall = calls.find((a) => a[0] === 'diff' && a.includes('--'));
-    expect(diffCall).toContain(HEAD_HASH);
+    expect(diffCall?.some((arg) => arg.includes(HEAD_HASH))).toBe(true);
   });
 
   it('should return the diff output from the merge-base-to-HEAD diff', async () => {

@@ -8,6 +8,7 @@ export type LookPreset =
   | 'minimal'
   | 'zenburnesque'
   | 'islands-dark'
+  | 'islands-light'
   | 'workbench';
 
 export interface LookPresetOption {
@@ -21,6 +22,11 @@ export const LOOK_PRESETS: LookPresetOption[] = [
     id: 'islands-dark',
     label: 'Islands Dark',
     description: 'JetBrains-inspired dark panels on a tinted frame',
+  },
+  {
+    id: 'islands-light',
+    label: 'Islands Light',
+    description: 'JetBrains-inspired light panels on a soft tinted frame',
   },
   {
     id: 'minimal',

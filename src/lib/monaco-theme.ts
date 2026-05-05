@@ -8,6 +8,7 @@ interface PresetColors {
   fgSubtle: string;
   border: string;
   accent: string;
+  base?: 'vs' | 'vs-dark';
 }
 
 // Colors are generally derived from the CSS variables in src/styles.css for each look preset,
@@ -84,6 +85,15 @@ const presetColors: Record<LookPreset, PresetColors> = {
     border: '#2c2f34',
     accent: '#548af7',
   },
+  'islands-light': {
+    bgElevated: '#ffffff',
+    fg: '#1f2329',
+    fgMuted: '#5e6066',
+    fgSubtle: '#8d9199',
+    border: '#d3d5db',
+    accent: '#3574f0',
+    base: 'vs',
+  },
   workbench: {
     bgElevated: '#1f1f1f',
     fg: '#cccccc',
@@ -95,8 +105,9 @@ const presetColors: Record<LookPreset, PresetColors> = {
 };
 
 function buildThemeData(c: PresetColors): monaco.editor.IStandaloneThemeData {
+  const isLight = c.base === 'vs';
   return {
-    base: 'vs-dark',
+    base: c.base ?? 'vs-dark',
     inherit: true,
     rules: [
       { token: 'comment', foreground: c.fgSubtle.slice(1) },
@@ -105,15 +116,15 @@ function buildThemeData(c: PresetColors): monaco.editor.IStandaloneThemeData {
     colors: {
       'editor.background': c.bgElevated,
       'editor.foreground': c.fg,
-      'editor.lineHighlightBackground': '#ffffff06',
+      'editor.lineHighlightBackground': isLight ? '#00000008' : '#ffffff06',
       'editorLineNumber.foreground': c.fgSubtle,
       'editorLineNumber.activeForeground': c.fgMuted,
       'editor.selectionBackground': c.accent + '33',
       'editorWidget.background': c.bgElevated,
       'editorWidget.border': c.border,
-      // GitHub-inspired diff palette, toned down for dark backgrounds
-      'diffEditor.insertedLineBackground': '#2ea04315',
-      'diffEditor.removedLineBackground': '#f8514915',
+      // GitHub-inspired diff palette
+      'diffEditor.insertedLineBackground': isLight ? '#2ea04322' : '#2ea04315',
+      'diffEditor.removedLineBackground': isLight ? '#f8514922' : '#f8514915',
       'diffEditor.insertedTextBackground': '#2ea04340',
       'diffEditor.removedTextBackground': '#f8514940',
       'diffEditorGutter.insertedLineBackground': '#2ea04326',

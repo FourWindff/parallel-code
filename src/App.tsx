@@ -31,6 +31,7 @@ import {
   stopTaskStatusPolling,
   navigateRow,
   navigateColumn,
+  navigateTask,
   setPendingAction,
   toggleHelpDialog,
   toggleSettingsDialog,
@@ -456,6 +457,8 @@ function App() {
       'navigateRow:down': () => navigateRow('down'),
       'navigateColumn:left': () => navigateColumn('left'),
       'navigateColumn:right': () => navigateColumn('right'),
+      'navigateTask:left': () => navigateTask('left'),
+      'navigateTask:right': () => navigateTask('right'),
       'moveActiveTask:left': () => moveActiveTask('left'),
       'moveActiveTask:right': () => moveActiveTask('right'),
       ...Object.fromEntries(

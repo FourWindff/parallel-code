@@ -401,6 +401,38 @@ export function navigateColumn(direction: 'left' | 'right'): void {
   }
 }
 
+/**
+ * Switch directly to the prev/next task in `taskOrder`, preserving the focused
+ * panel name when it exists in the target's grid. Clamps at edges (no sidebar
+ * or placeholder fall-through). Collapsed tasks are not in `taskOrder`, so
+ * they are skipped — same semantics as `navigateColumn`'s cross-task path.
+ */
+export function navigateTask(direction: 'left' | 'right'): void {
+  if (store.showNewTaskDialog || store.showHelpDialog || store.showSettingsDialog) return;
+
+  const { taskOrder, activeTaskId } = store;
+  if (!activeTaskId) return;
+
+  const currentIdx = taskOrder.indexOf(activeTaskId);
+  if (currentIdx === -1) return;
+
+  const targetIdx = direction === 'left' ? currentIdx - 1 : currentIdx + 1;
+  if (targetIdx < 0 || targetIdx >= taskOrder.length) return;
+
+  const targetId = taskOrder[targetIdx];
+  if (!store.tasks[targetId]) return;
+
+  const currentPanel = getTaskFocusedPanel(activeTaskId);
+  const targetGrid = buildGrid(targetId);
+  const targetPanel =
+    findInGrid(targetGrid, currentPanel) !== null ? currentPanel : defaultPanelFor(targetId);
+
+  batch(() => {
+    setActiveTask(targetId);
+    setTaskFocusedPanel(targetId, targetPanel);
+  });
+}
+
 export function setPendingAction(
   action: { type: 'close' | 'merge' | 'push'; taskId: string } | null,
 ): void {

@@ -82,7 +82,7 @@ vi.mock('./tasks', () => ({
   }),
 }));
 
-import { navigateColumn, navigateRow } from './focus';
+import { navigateColumn, navigateRow, navigateTask } from './focus';
 
 function setTask(id: string, overrides: Record<string, unknown> = {}): void {
   mockStore.tasks[id] = {
@@ -221,5 +221,94 @@ describe('focus navigation neighbor map', () => {
     navigateRow('down');
 
     expect(mockStore.focusedPanel['task-1']).toBe('shell:0');
+  });
+});
+
+describe('navigateTask', () => {
+  it('preserves the focused panel name when switching to the next task', () => {
+    setTask('task-1');
+    setTask('task-2');
+    mockStore.taskOrder = ['task-1', 'task-2'];
+    mockStore.focusedPanel['task-1'] = 'changed-files';
+
+    navigateTask('right');
+
+    expect(mockStore.activeTaskId).toBe('task-2');
+    expect(mockStore.focusedPanel['task-2']).toBe('changed-files');
+  });
+
+  it('preserves the focused panel name when switching to the previous task', () => {
+    setTask('task-1');
+    setTask('task-2');
+    mockStore.taskOrder = ['task-1', 'task-2'];
+    mockStore.activeTaskId = 'task-2';
+    mockStore.focusedPanel['task-2'] = 'notes';
+
+    navigateTask('left');
+
+    expect(mockStore.activeTaskId).toBe('task-1');
+    expect(mockStore.focusedPanel['task-1']).toBe('notes');
+  });
+
+  it('falls back to the default panel when the current panel does not exist in the target', () => {
+    setTask('task-1', { stepsEnabled: true, stepsContent: [{ id: 'step-1' }] });
+    setTask('task-2');
+    mockStore.taskOrder = ['task-1', 'task-2'];
+    mockStore.focusedPanel['task-1'] = 'steps';
+
+    navigateTask('right');
+
+    expect(mockStore.activeTaskId).toBe('task-2');
+    expect(mockStore.focusedPanel['task-2']).toBe('ai-terminal');
+  });
+
+  it('is a no-op at the leftmost task', () => {
+    setTask('task-1');
+    setTask('task-2');
+    mockStore.taskOrder = ['task-1', 'task-2'];
+    mockStore.activeTaskId = 'task-1';
+    mockStore.focusedPanel['task-1'] = 'changed-files';
+
+    navigateTask('left');
+
+    expect(mockStore.activeTaskId).toBe('task-1');
+    expect(mockStore.focusedPanel['task-1']).toBe('changed-files');
+    expect(mockStore.sidebarFocused).toBe(false);
+  });
+
+  it('is a no-op at the rightmost task', () => {
+    setTask('task-1');
+    setTask('task-2');
+    mockStore.taskOrder = ['task-1', 'task-2'];
+    mockStore.activeTaskId = 'task-2';
+    mockStore.focusedPanel['task-2'] = 'notes';
+
+    navigateTask('right');
+
+    expect(mockStore.activeTaskId).toBe('task-2');
+    expect(mockStore.focusedPanel['task-2']).toBe('notes');
+    expect(mockStore.placeholderFocused).toBe(false);
+  });
+
+  it('is a no-op when the active id is not in taskOrder (e.g. terminal)', () => {
+    setTask('task-1');
+    mockStore.taskOrder = ['task-1'];
+    mockStore.activeTaskId = 'terminal-1';
+
+    navigateTask('right');
+
+    expect(mockStore.activeTaskId).toBe('terminal-1');
+  });
+
+  it('is a no-op while a dialog is open', () => {
+    setTask('task-1');
+    setTask('task-2');
+    mockStore.taskOrder = ['task-1', 'task-2'];
+    mockStore.focusedPanel['task-1'] = 'changed-files';
+    mockStore.showHelpDialog = true;
+
+    navigateTask('right');
+
+    expect(mockStore.activeTaskId).toBe('task-1');
   });
 });

@@ -58,7 +58,6 @@ export {
 export {
   setActiveTask,
   setActiveAgent,
-  navigateTask,
   navigateAgent,
   moveActiveTask,
   jumpToTask,
@@ -80,6 +79,7 @@ export {
   unfocusPlaceholder,
   navigateRow,
   navigateColumn,
+  navigateTask,
   setPendingAction,
   clearPendingAction,
   toggleHelpDialog,

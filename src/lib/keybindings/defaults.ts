@@ -48,6 +48,53 @@ export const DEFAULT_BINDINGS: KeyBinding[] = [
     action: 'navigateColumn:right',
     global: true,
   },
+  // Cmd+Opt+Arrow on macOS (Chrome-style tab switching). On Linux, Ctrl+Alt+Arrow
+  // is captured by GNOME/KDE for workspace switching, so use Ctrl+PageUp/PageDown
+  // instead — same shortcut Chrome and Firefox use for tabs on Linux.
+  {
+    id: 'app.nav.task-left',
+    layer: 'app',
+    category: 'Navigation',
+    description: 'Switch to previous task',
+    platform: 'mac',
+    key: 'ArrowLeft',
+    modifiers: { cmdOrCtrl: true, alt: true },
+    action: 'navigateTask:left',
+    global: true,
+  },
+  {
+    id: 'app.nav.task-right',
+    layer: 'app',
+    category: 'Navigation',
+    description: 'Switch to next task',
+    platform: 'mac',
+    key: 'ArrowRight',
+    modifiers: { cmdOrCtrl: true, alt: true },
+    action: 'navigateTask:right',
+    global: true,
+  },
+  {
+    id: 'app.nav.task-left-linux',
+    layer: 'app',
+    category: 'Navigation',
+    description: 'Switch to previous task',
+    platform: 'linux',
+    key: 'PageUp',
+    modifiers: { cmdOrCtrl: true },
+    action: 'navigateTask:left',
+    global: true,
+  },
+  {
+    id: 'app.nav.task-right-linux',
+    layer: 'app',
+    category: 'Navigation',
+    description: 'Switch to next task',
+    platform: 'linux',
+    key: 'PageDown',
+    modifiers: { cmdOrCtrl: true },
+    action: 'navigateTask:right',
+    global: true,
+  },
 
   // -------------------------------------------------------------------------
   // App layer — Task reordering

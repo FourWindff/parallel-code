@@ -24,6 +24,7 @@ import {
   toggleSidebar,
   toggleArena,
   moveActiveTask,
+  jumpToTask,
   adjustGlobalScale,
   resetGlobalScale,
   startTaskStatusPolling,
@@ -49,7 +50,12 @@ import {
 } from './store/store';
 import { isGitHubUrl } from './lib/github-url';
 import type { PersistedWindowState } from './store/types';
-import { initShortcuts, registerFromRegistry, registerZoomShortcuts } from './lib/shortcuts';
+import {
+  initShortcuts,
+  registerFromRegistry,
+  registerJumpToTaskShortcuts,
+  registerZoomShortcuts,
+} from './lib/shortcuts';
 import { resolvedBindings, loadKeybindings, dismissMigrationBanner } from './store/keybindings';
 import { setupAutosave } from './store/autosave';
 import { isMac, mod } from './lib/platform';
@@ -452,6 +458,9 @@ function App() {
       'navigateColumn:right': () => navigateColumn('right'),
       'moveActiveTask:left': () => moveActiveTask('left'),
       'moveActiveTask:right': () => moveActiveTask('right'),
+      ...Object.fromEntries(
+        Array.from({ length: 9 }, (_, i) => [`jumpToTask:${i + 1}`, () => jumpToTask(i)]),
+      ),
       closeShell: () => {
         const taskId = store.activeTaskId;
         if (!taskId) return;
@@ -516,6 +525,8 @@ function App() {
       resetZoom: () => resetGlobalScale(),
     });
 
+    const cleanupJumpToTaskShortcuts = registerJumpToTaskShortcuts((i) => jumpToTask(i));
+
     createEffect(() => {
       const cleanup = registerFromRegistry(resolvedBindings(), actionHandlers);
       onCleanup(cleanup);
@@ -535,6 +546,7 @@ function App() {
       unlistenResized?.();
       unlistenMoved?.();
       cleanupZoomShortcuts();
+      cleanupJumpToTaskShortcuts();
     });
   });
 

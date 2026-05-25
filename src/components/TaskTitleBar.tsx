@@ -30,6 +30,10 @@ interface TaskTitleBarProps {
   onTitleEditRef: (h: EditableTextHandle) => void;
 }
 
+function getMergeButtonTitle(task: Pick<Task, 'baseBranch'>): string {
+  return `Merge into ${task.baseBranch ?? 'main'}`;
+}
+
 export function TaskTitleBar(props: TaskTitleBarProps) {
   const dockerBadgeLabel = () => getTaskDockerBadgeLabel(props.task.dockerSource);
   const titleLabel = () => {
@@ -126,7 +130,7 @@ export function TaskTitleBar(props: TaskTitleBarProps) {
               </svg>
             }
             onClick={() => props.onMerge()}
-            title="Merge into main"
+            title={getMergeButtonTitle(props.task)}
           />
           <div style={{ position: 'relative', display: 'inline-flex' }}>
             <Show

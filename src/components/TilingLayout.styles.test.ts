@@ -3,6 +3,10 @@ import { resolve } from 'node:path';
 import { describe, expect, it } from 'vitest';
 
 const css = readFileSync(resolve(process.cwd(), 'src/styles.css'), 'utf8');
+const tilingLayoutSource = readFileSync(
+  resolve(process.cwd(), 'src/components/TilingLayout.tsx'),
+  'utf8',
+);
 
 function hasRule(selector: string): boolean {
   const escapedSelector = selector.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
@@ -77,5 +81,19 @@ describe('tiling layout group collapse controls', () => {
     expect(expandButton.width).toBe('18px');
     expect(expandButton['flex-shrink']).toBe('0');
     expect(expandButton.background).toBe('inherit');
+  });
+});
+
+describe('task panel active styles', () => {
+  it('does not draw an accent glow around the active task panel', () => {
+    const activeTaskColumn = declarationsFor('.task-column.active');
+
+    expect(activeTaskColumn['box-shadow']).toBeUndefined();
+    expect(activeTaskColumn.opacity).toBe('1');
+  });
+
+  it('does not draw an accent outline around a collapsed active panel group', () => {
+    expect(tilingLayoutSource).not.toContain('groupCollapsed() && groupHasActive()');
+    expect(tilingLayoutSource).not.toContain('inset 0 0 0 2px ${theme.accent}');
   });
 });

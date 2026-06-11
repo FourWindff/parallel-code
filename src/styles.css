@@ -1318,7 +1318,6 @@ textarea::placeholder {
 }
 
 .task-column.active {
-  box-shadow: 0 0 8px color-mix(in srgb, var(--accent) 50%, transparent);
   border-color: color-mix(in srgb, var(--border) 85%, transparent) !important;
   opacity: 1;
 }

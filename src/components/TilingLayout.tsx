@@ -905,10 +905,6 @@ export function TilingLayout() {
                     groupInfo
                       ? isPanelGroupCollapsed(groupInfo.projectId, groupInfo.groupType)
                       : false;
-                  const groupHasActive = () =>
-                    panelChildren()
-                      .slice(currentSegment.start, currentSegment.end + 1)
-                      .some((child) => child.id === store.activeTaskId);
                   return (
                     <>
                       <div
@@ -920,10 +916,6 @@ export function TilingLayout() {
                           'border-radius': '12px',
                           overflow: 'hidden',
                           padding: groupWrapperPadding(groupCollapsed()),
-                          'box-shadow':
-                            groupCollapsed() && groupHasActive()
-                              ? `inset 0 0 0 2px ${theme.accent}`
-                              : undefined,
                         }}
                       >
                         <For

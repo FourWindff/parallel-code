@@ -80,7 +80,21 @@ describe('tiling layout group collapse controls', () => {
     expect(expandButton.position).toBe('relative');
     expect(expandButton.width).toBe('18px');
     expect(expandButton['flex-shrink']).toBe('0');
-    expect(expandButton.background).toBe('inherit');
+    expect(expandButton.background).toBe('transparent');
+  });
+
+  it('uses the same color treatment for collapse and expand controls', () => {
+    const collapseButton = declarationsFor('.panel-group-collapse-btn');
+    const expandButton = declarationsFor('.panel-group-expand-btn');
+    const collapseButtonHover = declarationsFor('.panel-group-collapse-btn:hover');
+    const expandButtonHover = declarationsFor('.panel-group-expand-btn:hover');
+
+    expect(expandButton.background).toBe(collapseButton.background);
+    expect(collapseButton.color).toBe('var(--fg-subtle)');
+    expect(expandButton.color).toBe(collapseButton.color);
+    expect(expandButtonHover.filter).toBe(collapseButtonHover.filter);
+    expect(expandButtonHover.color).toBe(collapseButtonHover.color);
+    expect(tilingLayoutSource).not.toContain('style={{ color: info().color }}');
   });
 });
 

@@ -2354,8 +2354,8 @@ html[data-look^='islands-'] .group-between-handle::before {
   height: 100%;
   padding: 0;
   border: none;
-  background: inherit;
-  color: inherit;
+  background: transparent;
+  color: var(--fg-subtle);
   cursor: pointer;
   display: flex;
   align-items: center;
@@ -2366,6 +2366,6 @@ html[data-look^='islands-'] .group-between-handle::before {
 }
 
 .panel-group-expand-btn:hover {
-  filter: brightness(1.3);
+  filter: brightness(1.2);
   color: var(--fg);
 }

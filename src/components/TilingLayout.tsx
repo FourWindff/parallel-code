@@ -942,7 +942,6 @@ export function TilingLayout() {
                             <button
                               class="panel-group-expand-btn"
                               title="Expand group"
-                              style={{ color: info().color }}
                               onClick={() =>
                                 togglePanelGroupCollapsed(info().projectId, info().groupType)
                               }

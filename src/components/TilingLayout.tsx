@@ -2,6 +2,7 @@ import {
   batch,
   Show,
   For,
+  Index,
   createMemo,
   createEffect,
   createSignal,
@@ -19,8 +20,11 @@ import {
   getPanelUserSize,
   setPanelUserSize,
   deletePanelUserSize,
+  isPanelGroupCollapsed,
+  togglePanelGroupCollapsed,
 } from '../store/store';
 import { closeTask } from '../store/tasks';
+import type { PanelGroupType } from '../store/store';
 import { TaskPanel } from './TaskPanel';
 import { TerminalPanel } from './TerminalPanel';
 import { NewTaskPlaceholder } from './NewTaskPlaceholder';
@@ -30,6 +34,90 @@ import { mod } from '../lib/platform';
 import { createCtrlShiftWheelResizeHandler } from '../lib/wheelZoom';
 
 const VIEWPORT_EPSILON_PX = 4;
+
+interface PanelGroup {
+  projectId: string;
+  groupType: PanelGroupType;
+  panelIds: string[];
+  color: string;
+}
+
+interface GroupInfo {
+  projectId: string;
+  groupType: PanelGroupType;
+  isFirst: boolean;
+  isLast: boolean;
+  color: string;
+}
+
+type TilingSegment =
+  | { type: 'group'; group: PanelGroup }
+  | { type: 'panel'; panelId: string };
+
+function computeTilingSegments(taskOrder: string[]): TilingSegment[] {
+  const segments: TilingSegment[] = [];
+  let current: PanelGroup | null = null;
+
+  for (const panelId of taskOrder) {
+    const task = store.tasks[panelId];
+    if (!task) {
+      if (current) {
+        segments.push({ type: 'group', group: current });
+        current = null;
+      }
+      segments.push({ type: 'panel', panelId });
+      continue;
+    }
+    const project = store.projects.find((p) => p.id === task.projectId);
+    if (!project) {
+      if (current) {
+        segments.push({ type: 'group', group: current });
+        current = null;
+      }
+      segments.push({ type: 'panel', panelId });
+      continue;
+    }
+    const groupType: PanelGroupType =
+      task.coordinatorMode || task.coordinatedBy ? 'coordinator' : 'independent';
+    if (current && current.projectId === task.projectId && current.groupType === groupType) {
+      current.panelIds.push(panelId);
+    } else {
+      if (current) {
+        segments.push({ type: 'group', group: current });
+      }
+      current = {
+        projectId: task.projectId,
+        groupType,
+        panelIds: [panelId],
+        color: project.color,
+      };
+    }
+  }
+  if (current) {
+    segments.push({ type: 'group', group: current });
+  }
+  return segments;
+}
+
+function buildGroupInfoMap(segments: TilingSegment[]): Map<string, GroupInfo> {
+  const map = new Map<string, GroupInfo>();
+  for (const segment of segments) {
+    if (segment.type === 'group') {
+      const group = segment.group;
+      const bg = `color-mix(in srgb, ${group.color} 50%, transparent)`;
+      for (let i = 0; i < group.panelIds.length; i++) {
+        map.set(group.panelIds[i], {
+          projectId: group.projectId,
+          groupType: group.groupType,
+          isFirst: i === 0,
+          isLast: i === group.panelIds.length - 1,
+          color: bg,
+        });
+      }
+    }
+  }
+  return map;
+}
 
 /** Tiling-layout top-level child. Distinct from `PanelChild` because this
  *  layout owns its own horizontal drag model — fixed placeholders, per-panel
@@ -41,7 +129,27 @@ interface TileChild {
   minSize?: number;
   maxSize?: number;
   fixed?: boolean;
+  hidden?: boolean;
+  groupInfo?: GroupInfo;
   content: () => JSX.Element;
+}
+
+type GroupPanelEntry = { type: 'panel'; id: string; hidden: boolean; groupInfo: GroupInfo };
+
+function buildGroupPanelEntries(group: PanelGroup, collapsed: boolean): GroupPanelEntry[] {
+  const groupInfoMap = buildGroupInfoMap([{ type: 'group', group }]);
+  return group.panelIds.map((id) => ({
+    type: 'panel',
+    id,
+    hidden: collapsed,
+    groupInfo: groupInfoMap.get(id)!,
+  }));
+}
+
+export function buildGroupPanelEntriesForTest(
+  group: PanelGroup & { collapsed: boolean },
+): GroupPanelEntry[] {
+  return buildGroupPanelEntries(group, group.collapsed);
 }
 
 export function TilingLayout() {
@@ -219,133 +327,168 @@ export function TilingLayout() {
   // and doesn't unmount/remount panels when taskOrder changes.
   const panelCache = new Map<string, TileChild>();
 
+  function createPanelTileChild(panelId: string): TileChild {
+    return {
+      id: panelId,
+      initialSize: 520,
+      minSize: 300,
+      content: () => {
+        const task = store.tasks[panelId];
+        const terminal = store.terminals[panelId];
+        // eslint-disable-next-line solid/components-return-once
+        if (!task && !terminal) return <div />;
+        return (
+          <div
+            data-task-id={panelId}
+            class={
+              task?.closingStatus === 'removing' || terminal?.closingStatus === 'removing'
+                ? 'task-removing'
+                : 'task-appearing'
+            }
+            style={{
+              height: '100%',
+              padding: store.themePreset.startsWith('islands-')
+                ? store.focusMode
+                  ? '6px 0'
+                  : '6px 1px'
+                : '6px 3px',
+              'box-sizing': 'border-box',
+            }}
+            onAnimationEnd={(e) => {
+              if (e.animationName === 'taskAppear')
+                e.currentTarget.classList.remove('task-appearing');
+            }}
+          >
+            <ErrorBoundary
+              fallback={(err, reset) => (
+                <div
+                  style={{
+                    height: '100%',
+                    display: 'flex',
+                    'flex-direction': 'column',
+                    'align-items': 'center',
+                    'justify-content': 'center',
+                    gap: '12px',
+                    padding: '24px',
+                    background: theme.islandBg,
+                    'border-radius': '12px',
+                    border: `1px solid ${theme.border}`,
+                    color: theme.fgMuted,
+                    'font-size': '14px',
+                  }}
+                >
+                  <div style={{ color: theme.error, 'font-weight': '600' }}>Panel crashed</div>
+                  <div
+                    style={{
+                      'text-align': 'center',
+                      'word-break': 'break-word',
+                      'max-width': '300px',
+                    }}
+                  >
+                    {String(err)}
+                  </div>
+                  <div style={{ display: 'flex', gap: '8px' }}>
+                    <button
+                      onClick={reset}
+                      style={{
+                        background: theme.bgElevated,
+                        border: `1px solid ${theme.border}`,
+                        color: theme.fg,
+                        padding: '6px 16px',
+                        'border-radius': '6px',
+                        cursor: 'pointer',
+                      }}
+                    >
+                      Retry
+                    </button>
+                    <button
+                      onClick={() => {
+                        const task = store.tasks[panelId];
+                        if (task) {
+                          const msg =
+                            task.gitIsolation !== 'worktree' || task.externalWorktree
+                              ? 'Close this task? Running agents and shells will be stopped.'
+                              : 'Close this task? The worktree and branch will be deleted.';
+                          if (window.confirm(msg)) closeTask(panelId);
+                        } else if (store.terminals[panelId]) {
+                          closeTerminal(panelId);
+                        }
+                      }}
+                      style={{
+                        background: theme.bgElevated,
+                        border: `1px solid ${theme.border}`,
+                        color: theme.error,
+                        padding: '6px 16px',
+                        'border-radius': '6px',
+                        cursor: 'pointer',
+                      }}
+                    >
+                      {store.tasks[panelId] ? 'Close Task' : 'Close Terminal'}
+                    </button>
+                  </div>
+                </div>
+              )}
+            >
+              {task ? (
+                <TaskPanel task={task} isActive={store.activeTaskId === panelId} />
+              ) : terminal ? (
+                <TerminalPanel terminal={terminal} isActive={store.activeTaskId === panelId} />
+              ) : null}
+            </ErrorBoundary>
+          </div>
+        );
+      },
+    };
+  }
+
   const panelChildren = createMemo((): TileChild[] => {
+    // Establish reactivity for projects and collapsed state
+    void store.projects.length;
+    void Object.keys(store.panelGroupCollapsed).join(',');
+
     const currentIds = new Set<string>(store.taskOrder);
     currentIds.add('__placeholder');
 
-    // Remove stale entries for deleted tasks
+    // Remove stale entries for deleted tasks (keep collapsed placeholders)
     for (const key of panelCache.keys()) {
+      if (key === '__placeholder') continue;
+      if (key.startsWith('__collapsed:')) continue;
       if (!currentIds.has(key)) panelCache.delete(key);
     }
 
-    const panels: TileChild[] = store.taskOrder.map((panelId) => {
-      let cached = panelCache.get(panelId);
-      if (!cached) {
-        cached = {
-          id: panelId,
-          initialSize: 520,
-          minSize: 300,
-          content: () => {
-            const task = store.tasks[panelId];
-            const terminal = store.terminals[panelId];
-            // eslint-disable-next-line solid/components-return-once
-            if (!task && !terminal) return <div />;
-            return (
-              <div
-                data-task-id={panelId}
-                class={
-                  task?.closingStatus === 'removing' || terminal?.closingStatus === 'removing'
-                    ? 'task-removing'
-                    : 'task-appearing'
-                }
-                style={{
-                  height: '100%',
-                  padding: store.themePreset.startsWith('islands-')
-                    ? store.focusMode
-                      ? '6px 0'
-                      : '6px 1px'
-                    : '6px 3px',
-                  'box-sizing': 'border-box',
-                }}
-                onAnimationEnd={(e) => {
-                  if (e.animationName === 'taskAppear')
-                    e.currentTarget.classList.remove('task-appearing');
-                }}
-              >
-                <ErrorBoundary
-                  fallback={(err, reset) => (
-                    <div
-                      style={{
-                        height: '100%',
-                        display: 'flex',
-                        'flex-direction': 'column',
-                        'align-items': 'center',
-                        'justify-content': 'center',
-                        gap: '12px',
-                        padding: '24px',
-                        background: theme.islandBg,
-                        'border-radius': '12px',
-                        border: `1px solid ${theme.border}`,
-                        color: theme.fgMuted,
-                        'font-size': '14px',
-                      }}
-                    >
-                      <div style={{ color: theme.error, 'font-weight': '600' }}>Panel crashed</div>
-                      <div
-                        style={{
-                          'text-align': 'center',
-                          'word-break': 'break-word',
-                          'max-width': '300px',
-                        }}
-                      >
-                        {String(err)}
-                      </div>
-                      <div style={{ display: 'flex', gap: '8px' }}>
-                        <button
-                          onClick={reset}
-                          style={{
-                            background: theme.bgElevated,
-                            border: `1px solid ${theme.border}`,
-                            color: theme.fg,
-                            padding: '6px 16px',
-                            'border-radius': '6px',
-                            cursor: 'pointer',
-                          }}
-                        >
-                          Retry
-                        </button>
-                        <button
-                          onClick={() => {
-                            const task = store.tasks[panelId];
-                            if (task) {
-                              const msg =
-                                task.gitIsolation !== 'worktree' || task.externalWorktree
-                                  ? 'Close this task? Running agents and shells will be stopped.'
-                                  : 'Close this task? The worktree and branch will be deleted.';
-                              if (window.confirm(msg)) closeTask(panelId);
-                            } else if (store.terminals[panelId]) {
-                              closeTerminal(panelId);
-                            }
-                          }}
-                          style={{
-                            background: theme.bgElevated,
-                            border: `1px solid ${theme.border}`,
-                            color: theme.error,
-                            padding: '6px 16px',
-                            'border-radius': '6px',
-                            cursor: 'pointer',
-                          }}
-                        >
-                          {store.tasks[panelId] ? 'Close Task' : 'Close Terminal'}
-                        </button>
-                      </div>
-                    </div>
-                  )}
-                >
-                  {task ? (
-                    <TaskPanel task={task} isActive={store.activeTaskId === panelId} />
-                  ) : terminal ? (
-                    <TerminalPanel terminal={terminal} isActive={store.activeTaskId === panelId} />
-                  ) : null}
-                </ErrorBoundary>
-              </div>
-            );
-          },
-        };
-        panelCache.set(panelId, cached);
+    const segments = computeTilingSegments(store.taskOrder);
+    const panels: TileChild[] = [];
+
+    for (const segment of segments) {
+      if (segment.type === 'group') {
+        const group = segment.group;
+        const entries = buildGroupPanelEntries(
+          group,
+          isPanelGroupCollapsed(group.projectId, group.groupType),
+        );
+        for (const entry of entries) {
+          const panelId = entry.id;
+          let cached = panelCache.get(panelId);
+          if (!cached) {
+            cached = createPanelTileChild(panelId);
+            panelCache.set(panelId, cached);
+          }
+          cached.groupInfo = entry.groupInfo;
+          cached.hidden = entry.hidden;
+          panels.push(cached);
+        }
+      } else {
+        const panelId = segment.panelId;
+        let cached = panelCache.get(panelId);
+        if (!cached) {
+          cached = createPanelTileChild(panelId);
+          panelCache.set(panelId, cached);
+        }
+        cached.groupInfo = undefined;
+        cached.hidden = false;
+        panels.push(cached);
       }
-      return cached;
-    });
+    }
 
     let placeholder = panelCache.get('__placeholder');
     if (!placeholder) {
@@ -388,6 +531,146 @@ export function TilingLayout() {
     }
     window.addEventListener('mousemove', onMove);
     window.addEventListener('mouseup', onUp);
+  }
+
+  type RenderSegment =
+    | { type: 'group'; start: number; end: number; color: string }
+    | { type: 'single'; index: number };
+
+  const renderSegments = createMemo(() => {
+    const items = panelChildren();
+    const segments: RenderSegment[] = [];
+    let i = 0;
+    while (i < items.length) {
+      const item = items[i];
+      if (item.groupInfo && !item.id.startsWith('__collapsed')) {
+        const start = i;
+        const color = item.groupInfo.color;
+        let end = i;
+        while (end + 1 < items.length) {
+          const next = items[end + 1];
+          if (
+            next.groupInfo?.projectId === item.groupInfo.projectId &&
+            next.groupInfo?.groupType === item.groupInfo.groupType
+          ) {
+            end++;
+          } else {
+            break;
+          }
+        }
+        segments.push({ type: 'group', start, end, color });
+        i = end + 1;
+      } else {
+        segments.push({ type: 'single', index: i });
+        i++;
+      }
+    }
+    return segments;
+  });
+
+  function renderHandle(globalIdx: number, extraClass?: string): JSX.Element {
+    const panels = panelChildren();
+    const child = panels[globalIdx];
+    const isGroupInnerHandle = () => {
+      if (globalIdx >= panels.length - 1) return false;
+      const next = panels[globalIdx + 1];
+      return (
+        child?.groupInfo != null &&
+        next?.groupInfo != null &&
+        child.groupInfo.projectId === next.groupInfo.projectId &&
+        child.groupInfo.groupType === next.groupInfo.groupType
+      );
+    };
+    return (
+      <div
+        class={`resize-handle resize-handle-h ${dragging() === globalIdx ? 'dragging' : ''} ${isGroupInnerHandle() ? 'group-inner-handle' : ''} ${extraClass ?? ''}`}
+        onMouseDown={(e) => handleDragStart(globalIdx, e)}
+        onDblClick={() => {
+          if (dragging() !== null) return;
+          const left = panels[globalIdx];
+          const right = panels[globalIdx + 1];
+          if (!left || !right) return;
+          deletePanelUserSize([`tiling:${left.id}`, `tiling:${right.id}`]);
+          requestAnimationFrame(() => updateViewportState());
+        }}
+      />
+    );
+  }
+
+  function panelItemJSX(
+    child: TileChild,
+    globalIdx: number,
+    total: number,
+    options?: { hideHandle?: boolean },
+  ): JSX.Element {
+    const isPlaceholder = child.id === '__placeholder';
+
+    const wrapperStyle = (): JSX.CSSProperties => {
+      if (child.hidden) {
+        return {
+          width: '0',
+          'min-width': '0',
+          height: '100%',
+          overflow: 'hidden',
+          visibility: 'hidden',
+          'pointer-events': 'none',
+          'flex-shrink': '0',
+          position: 'relative',
+        };
+      }
+      if (store.focusMode) {
+        if (isPlaceholder) return { display: 'none' };
+        const isActive = child.id === store.activeTaskId;
+        return {
+          position: 'absolute',
+          inset: store.themePreset.startsWith('islands-') ? '0 4px 0 0' : '0',
+          width: '100%',
+          height: '100%',
+          visibility: isActive ? 'visible' : 'hidden',
+          'pointer-events': isActive ? 'auto' : 'none',
+          overflow: 'hidden',
+        };
+      }
+      const s = sizeFor(child);
+      const min = child.minSize ?? 0;
+      return {
+        width: `${s}px`,
+        'min-width': `${min}px`,
+        'flex-shrink': '0',
+        overflow: 'hidden',
+        position: 'relative',
+      };
+    };
+
+    const showHandle = () =>
+      !child.hidden &&
+      !options?.hideHandle &&
+      !store.focusMode &&
+      !child.fixed &&
+      globalIdx < total - 1;
+    const showCollapseBtn = () => !child.hidden && !store.focusMode && child.groupInfo?.isLast;
+
+    return (
+      <>
+        <div style={wrapperStyle()}>{child.content()}</div>
+        <Show when={showCollapseBtn()}>
+          <button
+            class="panel-group-collapse-btn"
+            title="Collapse group"
+            onClick={() => {
+              if (child.groupInfo) {
+                togglePanelGroupCollapsed(child.groupInfo.projectId, child.groupInfo.groupType);
+              }
+            }}
+          >
+            <svg viewBox="0 0 16 16" fill="currentColor" aria-hidden="true">
+              <path d="M10.62 1.54a1 1 0 0 0-1.34.45l-3 6a1 1 0 0 0 0 .9l3 6a1 1 0 1 0 1.78-.9L8.28 8.44l2.78-5.55a1 1 0 0 0-.44-1.35z" />
+            </svg>
+          </button>
+        </Show>
+        <Show when={showHandle()}>{renderHandle(globalIdx)}</Show>
+      </>
+    );
   }
 
   return (
@@ -560,56 +843,86 @@ export function TilingLayout() {
                 : { width: 'fit-content', 'min-width': '100%' }),
             }}
           >
-            <For each={panelChildren()}>
-              {(child, i) => {
-                const wrapperStyle = createMemo((): JSX.CSSProperties => {
-                  const isPlaceholder = child.id === '__placeholder';
-                  if (store.focusMode) {
-                    if (isPlaceholder) return { display: 'none' };
-                    const isActive = child.id === store.activeTaskId;
-                    return {
-                      position: 'absolute',
-                      inset: store.themePreset.startsWith('islands-') ? '0 4px 0 0' : '0',
-                      width: '100%',
-                      height: '100%',
-                      visibility: isActive ? 'visible' : 'hidden',
-                      'pointer-events': isActive ? 'auto' : 'none',
-                      overflow: 'hidden',
-                    };
-                  }
-                  const s = sizeFor(child);
-                  const min = child.minSize ?? 0;
-                  return {
-                    width: `${s}px`,
-                    'min-width': `${min}px`,
-                    'flex-shrink': '0',
-                    overflow: 'hidden',
-                  };
-                });
-                const showHandle = () =>
-                  !store.focusMode && !child.fixed && i() < panelChildren().length - 1;
-                return (
-                  <>
-                    <div style={wrapperStyle()}>{child.content()}</div>
-                    <Show when={showHandle()}>
+            <Index each={renderSegments()}>
+              {(segment) => {
+                const total = panelChildren().length;
+                const currentSegment = segment();
+                if (currentSegment.type === 'group') {
+                  const groupPanelCount = currentSegment.end - currentSegment.start + 1;
+                  const firstChild = panelChildren()[currentSegment.start];
+                  const groupInfo = firstChild?.groupInfo;
+                  const groupCollapsed = () =>
+                    groupInfo
+                      ? isPanelGroupCollapsed(groupInfo.projectId, groupInfo.groupType)
+                      : false;
+                  const groupHasActive = () =>
+                    panelChildren()
+                      .slice(currentSegment.start, currentSegment.end + 1)
+                      .some((child) => child.id === store.activeTaskId);
+                  return (
+                    <>
                       <div
-                        class={`resize-handle resize-handle-h ${dragging() === i() ? 'dragging' : ''}`}
-                        onMouseDown={(e) => handleDragStart(i(), e)}
-                        onDblClick={() => {
-                          if (dragging() !== null) return;
-                          const panels = panelChildren();
-                          const left = panels[i()];
-                          const right = panels[i() + 1];
-                          if (!left || !right) return;
-                          deletePanelUserSize([`tiling:${left.id}`, `tiling:${right.id}`]);
-                          requestAnimationFrame(() => updateViewportState());
+                        class="panel-group-wrapper"
+                        style={{
+                          display: 'flex',
+                          'flex-direction': 'row',
+                          background: currentSegment.color,
+                          'border-radius': '12px',
+                          overflow: 'hidden',
+                          padding: groupCollapsed() ? '0' : '0 6px',
+                          width: groupCollapsed() ? '32px' : undefined,
+                          'box-shadow':
+                            groupCollapsed() && groupHasActive()
+                              ? `inset 0 0 0 2px ${theme.accent}`
+                              : undefined,
                         }}
-                      />
-                    </Show>
-                  </>
+                      >
+                        <For
+                          each={panelChildren().slice(
+                            currentSegment.start,
+                            currentSegment.end + 1,
+                          )}
+                        >
+                          {(child, localIdx) => {
+                            const isLastInGroup = localIdx() === groupPanelCount - 1;
+                            return panelItemJSX(
+                              child,
+                              currentSegment.start + localIdx(),
+                              total,
+                              { hideHandle: isLastInGroup },
+                            );
+                          }}
+                        </For>
+                        <Show when={groupCollapsed() && groupInfo}>
+                          {(info) => (
+                            <button
+                              class="panel-group-expand-btn"
+                              title="Expand group"
+                              style={{ color: info().color }}
+                              onClick={() =>
+                                togglePanelGroupCollapsed(info().projectId, info().groupType)
+                              }
+                            >
+                              <svg viewBox="0 0 16 16" fill="currentColor" aria-hidden="true">
+                                <path d="M5.38 1.54a1 1 0 0 1 1.34.45l3 6a1 1 0 0 1 0 .9l-3 6a1 1 0 1 1-1.78-.9l2.78-5.55-2.78-5.55a1 1 0 0 1 .44-1.35z" />
+                              </svg>
+                            </button>
+                          )}
+                        </Show>
+                      </div>
+                      <Show when={currentSegment.end < total - 1}>
+                        {renderHandle(currentSegment.end, 'group-between-handle')}
+                      </Show>
+                    </>
+                  );
+                }
+                return panelItemJSX(
+                  panelChildren()[currentSegment.index],
+                  currentSegment.index,
+                  total,
                 );
               }}
-            </For>
+            </Index>
           </div>
         </Show>
       </div>

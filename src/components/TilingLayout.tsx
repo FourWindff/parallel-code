@@ -129,7 +129,6 @@ interface TileChild {
   minSize?: number;
   maxSize?: number;
   fixed?: boolean;
-  hidden?: boolean;
   groupInfo?: GroupInfo;
   content: () => JSX.Element;
 }
@@ -138,10 +137,10 @@ type GroupPanelEntry = { type: 'panel'; id: string; hidden: boolean; groupInfo: 
 
 function buildGroupPanelEntries(group: PanelGroup, collapsed: boolean): GroupPanelEntry[] {
   const groupInfoMap = buildGroupInfoMap([{ type: 'group', group }]);
-  return group.panelIds.map((id) => ({
+  return group.panelIds.map((id, index) => ({
     type: 'panel',
     id,
-    hidden: collapsed,
+    hidden: collapsed && index > 0,
     groupInfo: groupInfoMap.get(id)!,
   }));
 }
@@ -150,6 +149,52 @@ export function buildGroupPanelEntriesForTest(
   group: PanelGroup & { collapsed: boolean },
 ): GroupPanelEntry[] {
   return buildGroupPanelEntries(group, group.collapsed);
+}
+
+export function isGroupPanelHiddenForTest(
+  groupInfo: GroupInfo | undefined,
+  isCollapsed: boolean,
+): boolean {
+  return isGroupPanelHidden(groupInfo, isCollapsed);
+}
+
+function isGroupPanelHidden(groupInfo: GroupInfo | undefined, isCollapsed: boolean): boolean {
+  return !!groupInfo && isCollapsed && !groupInfo.isFirst;
+}
+
+export function groupWrapperPaddingForTest(isCollapsed: boolean): string {
+  return groupWrapperPadding(isCollapsed);
+}
+
+function groupWrapperPadding(_isCollapsed: boolean): string {
+  return '0 6px';
+}
+
+export function groupResizeHandleIndexForTest(
+  groupStartIndex: number,
+  groupEndIndex: number,
+  isCollapsed: boolean,
+): number {
+  return groupResizeHandleIndex(groupStartIndex, groupEndIndex, isCollapsed);
+}
+
+function groupResizeHandleIndex(
+  groupStartIndex: number,
+  groupEndIndex: number,
+  isCollapsed: boolean,
+): number {
+  return isCollapsed ? groupStartIndex : groupEndIndex;
+}
+
+export function groupPanelInnerHandleHiddenForTest(
+  isCollapsed: boolean,
+  isLastInGroup: boolean,
+): boolean {
+  return groupPanelInnerHandleHidden(isCollapsed, isLastInGroup);
+}
+
+function groupPanelInnerHandleHidden(isCollapsed: boolean, isLastInGroup: boolean): boolean {
+  return isCollapsed || isLastInGroup;
 }
 
 export function TilingLayout() {
@@ -474,7 +519,6 @@ export function TilingLayout() {
             panelCache.set(panelId, cached);
           }
           cached.groupInfo = entry.groupInfo;
-          cached.hidden = entry.hidden;
           panels.push(cached);
         }
       } else {
@@ -485,7 +529,6 @@ export function TilingLayout() {
           panelCache.set(panelId, cached);
         }
         cached.groupInfo = undefined;
-        cached.hidden = false;
         panels.push(cached);
       }
     }
@@ -601,12 +644,19 @@ export function TilingLayout() {
     child: TileChild,
     globalIdx: number,
     total: number,
-    options?: { hideHandle?: boolean },
+    options?: { hideHandle?: () => boolean },
   ): JSX.Element {
     const isPlaceholder = child.id === '__placeholder';
+    const childHidden = () => {
+      const groupInfo = child.groupInfo;
+      return isGroupPanelHidden(
+        groupInfo,
+        groupInfo ? isPanelGroupCollapsed(groupInfo.projectId, groupInfo.groupType) : false,
+      );
+    };
 
     const wrapperStyle = (): JSX.CSSProperties => {
-      if (child.hidden) {
+      if (childHidden()) {
         return {
           width: '0',
           'min-width': '0',
@@ -643,12 +693,12 @@ export function TilingLayout() {
     };
 
     const showHandle = () =>
-      !child.hidden &&
-      !options?.hideHandle &&
+      !childHidden() &&
+      !options?.hideHandle?.() &&
       !store.focusMode &&
       !child.fixed &&
       globalIdx < total - 1;
-    const showCollapseBtn = () => !child.hidden && !store.focusMode && child.groupInfo?.isLast;
+    const showCollapseBtn = () => !childHidden() && !store.focusMode && child.groupInfo?.isLast;
 
     return (
       <>
@@ -869,8 +919,7 @@ export function TilingLayout() {
                           background: currentSegment.color,
                           'border-radius': '12px',
                           overflow: 'hidden',
-                          padding: groupCollapsed() ? '0' : '0 6px',
-                          width: groupCollapsed() ? '32px' : undefined,
+                          padding: groupWrapperPadding(groupCollapsed()),
                           'box-shadow':
                             groupCollapsed() && groupHasActive()
                               ? `inset 0 0 0 2px ${theme.accent}`
@@ -889,7 +938,10 @@ export function TilingLayout() {
                               child,
                               currentSegment.start + localIdx(),
                               total,
-                              { hideHandle: isLastInGroup },
+                              {
+                                hideHandle: () =>
+                                  groupPanelInnerHandleHidden(groupCollapsed(), isLastInGroup),
+                              },
                             );
                           }}
                         </For>
@@ -911,7 +963,14 @@ export function TilingLayout() {
                         </Show>
                       </div>
                       <Show when={currentSegment.end < total - 1}>
-                        {renderHandle(currentSegment.end, 'group-between-handle')}
+                        {renderHandle(
+                          groupResizeHandleIndex(
+                            currentSegment.start,
+                            currentSegment.end,
+                            groupCollapsed(),
+                          ),
+                          'group-between-handle',
+                        )}
                       </Show>
                     </>
                   );

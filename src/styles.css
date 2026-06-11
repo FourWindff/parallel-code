@@ -1496,10 +1496,19 @@ textarea::placeholder {
   cursor: row-resize;
 }
 
-/* Hide the center hairline on resize handles that sit inside a group
-   so the group background reads as one continuous surface. */
-.resize-handle-h.group-inner-handle::before {
-  display: none !important;
+.resize-handle-h.group-inner-handle {
+  margin: 0;
+  position: relative;
+  z-index: 3;
+  background: inherit;
+}
+
+.resize-handle-h.group-inner-handle:hover {
+  background: color-mix(in srgb, var(--accent) 70%, transparent);
+}
+
+.resize-handle-h.group-inner-handle.dragging {
+  background: color-mix(in srgb, var(--accent) 70%, transparent);
 }
 
 .new-task-placeholder {
@@ -2338,15 +2347,15 @@ html[data-look^='islands-'] .group-between-handle::before {
   filter: brightness(0.9);
 }
 
-/* Expand button inside collapsed-placeholder — fills the strip */
+/* Expand button beside the visible panel in a collapsed group. */
 .panel-group-expand-btn {
-  position: absolute;
-  inset: 0;
-  width: 100%;
+  position: relative;
+  flex-shrink: 0;
+  width: 18px;
   height: 100%;
   padding: 0;
   border: none;
-  background: transparent;
+  background: inherit;
   color: inherit;
   cursor: pointer;
   display: flex;

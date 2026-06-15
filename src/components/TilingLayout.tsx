@@ -2,7 +2,6 @@ import {
   batch,
   Show,
   For,
-  Index,
   createMemo,
   createEffect,
   createSignal,
@@ -50,9 +49,7 @@ interface GroupInfo {
   color: string;
 }
 
-type TilingSegment =
-  | { type: 'group'; group: PanelGroup }
-  | { type: 'panel'; panelId: string };
+type TilingSegment = { type: 'group'; group: PanelGroup } | { type: 'panel'; panelId: string };
 
 function computeTilingSegments(taskOrder: string[]): TilingSegment[] {
   const segments: TilingSegment[] = [];
@@ -134,6 +131,50 @@ interface TileChild {
 }
 
 type GroupPanelEntry = { type: 'panel'; id: string; hidden: boolean; groupInfo: GroupInfo };
+
+type RenderSegment =
+  | { type: 'group'; key: string; start: number; end: number; color: string }
+  | { type: 'single'; key: string; index: number };
+
+type RenderSegmentInput = {
+  id: string;
+  groupInfo?: GroupInfo;
+};
+
+function buildRenderSegments(items: RenderSegmentInput[]): RenderSegment[] {
+  const segments: RenderSegment[] = [];
+  let i = 0;
+  while (i < items.length) {
+    const item = items[i];
+    if (item.groupInfo && !item.id.startsWith('__collapsed')) {
+      const start = i;
+      const color = item.groupInfo.color;
+      const key = `group:${item.groupInfo.projectId}:${item.groupInfo.groupType}`;
+      let end = i;
+      while (end + 1 < items.length) {
+        const next = items[end + 1];
+        if (
+          next.groupInfo?.projectId === item.groupInfo.projectId &&
+          next.groupInfo?.groupType === item.groupInfo.groupType
+        ) {
+          end++;
+        } else {
+          break;
+        }
+      }
+      segments.push({ type: 'group', key, start, end, color });
+      i = end + 1;
+    } else {
+      segments.push({ type: 'single', key: `single:${item.id}`, index: i });
+      i++;
+    }
+  }
+  return segments;
+}
+
+export function buildRenderSegmentsForTest(items: RenderSegmentInput[]): RenderSegment[] {
+  return buildRenderSegments(items);
+}
 
 function buildGroupPanelEntries(group: PanelGroup, collapsed: boolean): GroupPanelEntry[] {
   const groupInfoMap = buildGroupInfoMap([{ type: 'group', group }]);
@@ -576,40 +617,7 @@ export function TilingLayout() {
     window.addEventListener('mouseup', onUp);
   }
 
-  type RenderSegment =
-    | { type: 'group'; start: number; end: number; color: string }
-    | { type: 'single'; index: number };
-
-  const renderSegments = createMemo(() => {
-    const items = panelChildren();
-    const segments: RenderSegment[] = [];
-    let i = 0;
-    while (i < items.length) {
-      const item = items[i];
-      if (item.groupInfo && !item.id.startsWith('__collapsed')) {
-        const start = i;
-        const color = item.groupInfo.color;
-        let end = i;
-        while (end + 1 < items.length) {
-          const next = items[end + 1];
-          if (
-            next.groupInfo?.projectId === item.groupInfo.projectId &&
-            next.groupInfo?.groupType === item.groupInfo.groupType
-          ) {
-            end++;
-          } else {
-            break;
-          }
-        }
-        segments.push({ type: 'group', start, end, color });
-        i = end + 1;
-      } else {
-        segments.push({ type: 'single', index: i });
-        i++;
-      }
-    }
-    return segments;
-  });
+  const renderSegments = createMemo(() => buildRenderSegments(panelChildren()));
 
   function renderHandle(globalIdx: number, extraClass?: string): JSX.Element {
     const panels = panelChildren();
@@ -893,10 +901,9 @@ export function TilingLayout() {
                 : { width: 'fit-content', 'min-width': '100%' }),
             }}
           >
-            <Index each={renderSegments()}>
-              {(segment) => {
+            <For each={renderSegments()}>
+              {(currentSegment) => {
                 const total = panelChildren().length;
-                const currentSegment = segment();
                 if (currentSegment.type === 'group') {
                   const groupPanelCount = currentSegment.end - currentSegment.start + 1;
                   const firstChild = panelChildren()[currentSegment.start];
@@ -919,22 +926,14 @@ export function TilingLayout() {
                         }}
                       >
                         <For
-                          each={panelChildren().slice(
-                            currentSegment.start,
-                            currentSegment.end + 1,
-                          )}
+                          each={panelChildren().slice(currentSegment.start, currentSegment.end + 1)}
                         >
                           {(child, localIdx) => {
                             const isLastInGroup = localIdx() === groupPanelCount - 1;
-                            return panelItemJSX(
-                              child,
-                              currentSegment.start + localIdx(),
-                              total,
-                              {
-                                hideHandle: () =>
-                                  groupPanelInnerHandleHidden(groupCollapsed(), isLastInGroup),
-                              },
-                            );
+                            return panelItemJSX(child, currentSegment.start + localIdx(), total, {
+                              hideHandle: () =>
+                                groupPanelInnerHandleHidden(groupCollapsed(), isLastInGroup),
+                            });
                           }}
                         </For>
                         <Show when={groupCollapsed() && groupInfo}>
@@ -972,7 +971,7 @@ export function TilingLayout() {
                   total,
                 );
               }}
-            </Index>
+            </For>
           </div>
         </Show>
       </div>

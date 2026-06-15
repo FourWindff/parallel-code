@@ -6,6 +6,7 @@ vi.mock('../lib/terminalFitManager', () => ({
 
 import {
   buildGroupPanelEntriesForTest,
+  buildRenderSegmentsForTest,
   groupResizeHandleIndexForTest,
   groupPanelInnerHandleHiddenForTest,
   groupWrapperPaddingForTest,
@@ -81,4 +82,36 @@ describe('TilingLayout panel group collapse planning', () => {
     expect(hideHandle()).toBe(true);
   });
 
+  it('changes segment keys when a single slot becomes a grouped project panel', () => {
+    const before = buildRenderSegmentsForTest([
+      { id: 'task-1', groupInfo: undefined },
+      { id: '__placeholder', groupInfo: undefined },
+    ]);
+    const after = buildRenderSegmentsForTest([
+      {
+        id: 'task-1',
+        groupInfo: {
+          projectId: 'project-1',
+          groupType: 'independent',
+          isFirst: true,
+          isLast: false,
+          color: '#334455',
+        },
+      },
+      {
+        id: 'task-2',
+        groupInfo: {
+          projectId: 'project-1',
+          groupType: 'independent',
+          isFirst: false,
+          isLast: true,
+          color: '#334455',
+        },
+      },
+      { id: '__placeholder', groupInfo: undefined },
+    ]);
+
+    expect(before[0]).toMatchObject({ type: 'single', key: 'single:task-1' });
+    expect(after[0]).toMatchObject({ type: 'group', key: 'group:project-1:independent' });
+  });
 });

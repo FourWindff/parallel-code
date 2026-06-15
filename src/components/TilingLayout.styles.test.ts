@@ -99,6 +99,20 @@ describe('tiling layout group collapse controls', () => {
 });
 
 describe('task panel active styles', () => {
+  it('does not let panel group colors tint inactive task panels through opacity', () => {
+    const taskColumn = declarationsFor('.task-column');
+
+    expect(taskColumn.opacity).toBeUndefined();
+  });
+
+  it('draws a neutral gray overlay over inactive task panels', () => {
+    const inactiveOverlay = declarationsFor('.task-column:not(.active)::before');
+
+    expect(inactiveOverlay.content).toBe("''");
+    expect(inactiveOverlay.background).toBe('rgba(128, 128, 128, 0.18)');
+    expect(inactiveOverlay['pointer-events']).toBe('none');
+  });
+
   it('does not draw an accent glow around the active task panel', () => {
     const activeTaskColumn = declarationsFor('.task-column.active');
 

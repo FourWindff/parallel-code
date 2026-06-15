@@ -1314,7 +1314,15 @@ textarea::placeholder {
   box-shadow: var(--shadow-soft);
   border-color: color-mix(in srgb, var(--border) 85%, transparent) !important;
   margin: 0 2px;
-  opacity: var(--inactive-column-opacity, 0.6);
+}
+
+.task-column:not(.active)::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: rgba(128, 128, 128, 0.18);
+  pointer-events: none;
+  z-index: 20;
 }
 
 .task-column.active {

@@ -46,6 +46,7 @@ interface GroupInfo {
   groupType: PanelGroupType;
   isFirst: boolean;
   isLast: boolean;
+  panelCount: number;
   color: string;
 }
 
@@ -108,6 +109,7 @@ function buildGroupInfoMap(segments: TilingSegment[]): Map<string, GroupInfo> {
           groupType: group.groupType,
           isFirst: i === 0,
           isLast: i === group.panelIds.length - 1,
+          panelCount: group.panelIds.length,
           color: bg,
         });
       }
@@ -199,8 +201,21 @@ export function isGroupPanelHiddenForTest(
   return isGroupPanelHidden(groupInfo, isCollapsed);
 }
 
+export function isPanelGroupCollapsibleForTest(panelCount: number): boolean {
+  return isPanelGroupCollapsible(panelCount);
+}
+
+function isPanelGroupCollapsible(panelCount: number): boolean {
+  return panelCount > 1;
+}
+
 function isGroupPanelHidden(groupInfo: GroupInfo | undefined, isCollapsed: boolean): boolean {
-  return !!groupInfo && isCollapsed && !groupInfo.isFirst;
+  return (
+    !!groupInfo &&
+    isPanelGroupCollapsible(groupInfo.panelCount) &&
+    isCollapsed &&
+    !groupInfo.isFirst
+  );
 }
 
 export function groupWrapperPaddingForTest(isCollapsed: boolean): string {
@@ -236,6 +251,30 @@ export function groupPanelInnerHandleHiddenForTest(
 
 function groupPanelInnerHandleHidden(isCollapsed: boolean, isLastInGroup: boolean): boolean {
   return isCollapsed || isLastInGroup;
+}
+
+export function isPanelGroupCollapseControlVisibleForTest(
+  childHidden: boolean,
+  focusMode: boolean,
+  isLastInGroup: boolean | undefined,
+  panelCount: number | undefined,
+): boolean {
+  return isPanelGroupCollapseControlVisible(childHidden, focusMode, isLastInGroup, panelCount);
+}
+
+function isPanelGroupCollapseControlVisible(
+  childHidden: boolean,
+  focusMode: boolean,
+  isLastInGroup: boolean | undefined,
+  panelCount: number | undefined,
+): boolean {
+  return (
+    !childHidden &&
+    !focusMode &&
+    isLastInGroup === true &&
+    panelCount !== undefined &&
+    isPanelGroupCollapsible(panelCount)
+  );
 }
 
 export function TilingLayout() {
@@ -706,7 +745,13 @@ export function TilingLayout() {
       !store.focusMode &&
       !child.fixed &&
       globalIdx < total - 1;
-    const showCollapseBtn = () => !childHidden() && !store.focusMode && child.groupInfo?.isLast;
+    const showCollapseBtn = () =>
+      isPanelGroupCollapseControlVisible(
+        childHidden(),
+        store.focusMode,
+        child.groupInfo?.isLast,
+        child.groupInfo?.panelCount,
+      );
 
     return (
       <>
@@ -909,7 +954,7 @@ export function TilingLayout() {
                   const firstChild = panelChildren()[currentSegment.start];
                   const groupInfo = firstChild?.groupInfo;
                   const groupCollapsed = () =>
-                    groupInfo
+                    groupInfo && isPanelGroupCollapsible(groupInfo.panelCount)
                       ? isPanelGroupCollapsed(groupInfo.projectId, groupInfo.groupType)
                       : false;
                   return (

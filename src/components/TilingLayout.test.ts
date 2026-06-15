@@ -10,6 +10,8 @@ import {
   groupResizeHandleIndexForTest,
   groupPanelInnerHandleHiddenForTest,
   groupWrapperPaddingForTest,
+  isPanelGroupCollapseControlVisibleForTest,
+  isPanelGroupCollapsibleForTest,
   isGroupPanelHiddenForTest,
 } from './TilingLayout';
 
@@ -82,6 +84,16 @@ describe('TilingLayout panel group collapse planning', () => {
     expect(hideHandle()).toBe(true);
   });
 
+  it('does not allow a single task panel group to collapse', () => {
+    expect(isPanelGroupCollapsibleForTest(1)).toBe(false);
+    expect(isPanelGroupCollapsibleForTest(2)).toBe(true);
+  });
+
+  it('hides the collapse control for a single task panel group', () => {
+    expect(isPanelGroupCollapseControlVisibleForTest(false, false, true, 1)).toBe(false);
+    expect(isPanelGroupCollapseControlVisibleForTest(false, false, true, 2)).toBe(true);
+  });
+
   it('changes segment keys when a single slot becomes a grouped project panel', () => {
     const before = buildRenderSegmentsForTest([
       { id: 'task-1', groupInfo: undefined },
@@ -95,6 +107,7 @@ describe('TilingLayout panel group collapse planning', () => {
           groupType: 'independent',
           isFirst: true,
           isLast: false,
+          panelCount: 2,
           color: '#334455',
         },
       },
@@ -105,6 +118,7 @@ describe('TilingLayout panel group collapse planning', () => {
           groupType: 'independent',
           isFirst: false,
           isLast: true,
+          panelCount: 2,
           color: '#334455',
         },
       },

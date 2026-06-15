@@ -143,6 +143,19 @@ type RenderSegmentInput = {
   groupInfo?: GroupInfo;
 };
 
+const renderSegmentCache = new Map<string, RenderSegment>();
+
+function cachedRenderSegment(segment: RenderSegment): RenderSegment {
+  const identity =
+    segment.type === 'group'
+      ? `${segment.type}:${segment.key}:${segment.start}:${segment.end}:${segment.color}`
+      : `${segment.type}:${segment.key}:${segment.index}`;
+  const cached = renderSegmentCache.get(identity);
+  if (cached) return cached;
+  renderSegmentCache.set(identity, segment);
+  return segment;
+}
+
 function buildRenderSegments(items: RenderSegmentInput[]): RenderSegment[] {
   const segments: RenderSegment[] = [];
   let i = 0;
@@ -164,10 +177,10 @@ function buildRenderSegments(items: RenderSegmentInput[]): RenderSegment[] {
           break;
         }
       }
-      segments.push({ type: 'group', key, start, end, color });
+      segments.push(cachedRenderSegment({ type: 'group', key, start, end, color }));
       i = end + 1;
     } else {
-      segments.push({ type: 'single', key: `single:${item.id}`, index: i });
+      segments.push(cachedRenderSegment({ type: 'single', key: `single:${item.id}`, index: i }));
       i++;
     }
   }
@@ -275,6 +288,30 @@ function isPanelGroupCollapseControlVisible(
     panelCount !== undefined &&
     isPanelGroupCollapsible(panelCount)
   );
+}
+
+function hiddenPanelContentStyle(
+  hidden: boolean,
+  contentWidth: number | undefined,
+): JSX.CSSProperties {
+  return hidden
+    ? {
+        width: `${contentWidth ?? 0}px`,
+        height: '100%',
+        visibility: 'hidden',
+        'pointer-events': 'none',
+      }
+    : {
+        width: '100%',
+        height: '100%',
+      };
+}
+
+export function hiddenPanelContentStyleForTest(
+  hidden: boolean,
+  contentWidth: number | undefined,
+): JSX.CSSProperties {
+  return hiddenPanelContentStyle(hidden, contentWidth);
 }
 
 export function TilingLayout() {
@@ -701,6 +738,7 @@ export function TilingLayout() {
         groupInfo ? isPanelGroupCollapsed(groupInfo.projectId, groupInfo.groupType) : false,
       );
     };
+    const childSize = () => sizeFor(child);
 
     const wrapperStyle = (): JSX.CSSProperties => {
       if (childHidden()) {
@@ -728,7 +766,7 @@ export function TilingLayout() {
           overflow: 'hidden',
         };
       }
-      const s = sizeFor(child);
+      const s = childSize();
       const min = child.minSize ?? 0;
       return {
         width: `${s}px`,
@@ -755,7 +793,9 @@ export function TilingLayout() {
 
     return (
       <>
-        <div style={wrapperStyle()}>{child.content()}</div>
+        <div style={wrapperStyle()}>
+          <div style={hiddenPanelContentStyle(childHidden(), childSize())}>{child.content()}</div>
+        </div>
         <Show when={showCollapseBtn()}>
           <button
             class="panel-group-collapse-btn"

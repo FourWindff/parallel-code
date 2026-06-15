@@ -10,6 +10,7 @@ import {
   groupResizeHandleIndexForTest,
   groupPanelInnerHandleHiddenForTest,
   groupWrapperPaddingForTest,
+  hiddenPanelContentStyleForTest,
   isPanelGroupCollapseControlVisibleForTest,
   isPanelGroupCollapsibleForTest,
   isGroupPanelHiddenForTest,
@@ -127,5 +128,54 @@ describe('TilingLayout panel group collapse planning', () => {
 
     expect(before[0]).toMatchObject({ type: 'single', key: 'single:task-1' });
     expect(after[0]).toMatchObject({ type: 'group', key: 'group:project-1:independent' });
+  });
+
+  it('reuses unchanged render segment objects so collapsed groups do not remount panels', () => {
+    const items = [
+      {
+        id: 'task-1',
+        groupInfo: {
+          projectId: 'project-1',
+          groupType: 'independent' as const,
+          isFirst: true,
+          isLast: false,
+          panelCount: 2,
+          color: '#334455',
+        },
+      },
+      {
+        id: 'task-2',
+        groupInfo: {
+          projectId: 'project-1',
+          groupType: 'independent' as const,
+          isFirst: false,
+          isLast: true,
+          panelCount: 2,
+          color: '#334455',
+        },
+      },
+      { id: '__placeholder', groupInfo: undefined },
+    ];
+
+    const before = buildRenderSegmentsForTest(items);
+    const after = buildRenderSegmentsForTest(items);
+
+    expect(after[0]).toBe(before[0]);
+    expect(after[1]).toBe(before[1]);
+  });
+
+  it('preserves hidden panel content width so terminals are not resized to zero', () => {
+    expect(hiddenPanelContentStyleForTest(true, 520)).toMatchObject({
+      width: '520px',
+      height: '100%',
+      visibility: 'hidden',
+      'pointer-events': 'none',
+    });
+    expect(hiddenPanelContentStyleForTest(false, 520)).toMatchObject({
+      width: '100%',
+      height: '100%',
+    });
+    expect(hiddenPanelContentStyleForTest(false, 520)).not.toHaveProperty('visibility');
+    expect(hiddenPanelContentStyleForTest(false, 520)).not.toHaveProperty('pointer-events');
   });
 });
